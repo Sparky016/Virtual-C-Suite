@@ -1,0 +1,51 @@
+// Prisma schema for tracking-db
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./tracking.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model AnalysisRequest {
+  requestId     String   @id @map("request_id")
+  userId        String   @map("user_id")
+  fileKey       String   @map("file_key")
+  status        String
+  createdAt     Int      @map("created_at")
+  completedAt   Int?     @map("completed_at")
+  errorMessage  String?  @map("error_message")
+
+  executiveAnalyses ExecutiveAnalysis[]
+  finalReport       FinalReport?
+
+  @@index([userId, createdAt(sort: Desc)], name: "idx_user_requests")
+  @@index([status], name: "idx_status")
+  @@map("analysis_requests")
+}
+
+model ExecutiveAnalysis {
+  id            Int      @id @default(autoincrement())
+  requestId     String   @map("request_id")
+  executiveRole String   @map("executive_role")
+  analysisText  String   @map("analysis_text")
+  createdAt     Int      @map("created_at")
+
+  analysisRequest AnalysisRequest @relation(fields: [requestId], references: [requestId])
+
+  @@index([requestId], name: "idx_request_analyses")
+  @@map("executive_analyses")
+}
+
+model FinalReport {
+  requestId     String   @id @map("request_id")
+  reportContent String   @map("report_content")
+  reportKey     String   @map("report_key")
+  createdAt     Int      @map("created_at")
+
+  analysisRequest AnalysisRequest @relation(fields: [requestId], references: [requestId])
+
+  @@map("final_reports")
+}

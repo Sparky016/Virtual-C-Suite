@@ -1,0 +1,29 @@
+{
+  "name": "raindrop-csuite",
+  "version": "1.0.0",
+  "description": "Virtual C-Suite application built on Raindrop",
+  "main": "index.js",
+  "scripts": {
+    "start": "raindrop dev",
+    "build": "raindrop build",
+    "deploy": "raindrop deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "raindrop",
+    "c-suite",
+    "virtual"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "@liquidmetal-ai/raindrop-framework": "^0.11.0",
+    "hono": "^4.0.0"
+  }
+}
