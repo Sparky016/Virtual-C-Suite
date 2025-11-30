@@ -1,0 +1,88 @@
+================================================================================
+                 DEPLOY VIRTUAL C-SUITE RIGHT NOW
+================================================================================
+
+STEP 1: Open Windows Command Prompt
+------------------------------------
+Press:  Windows Key + R
+Type:   cmd
+Press:  Enter
+
+You should see a black window with:
+C:\Users\ruanc>
+
+
+STEP 2: Navigate to Project
+----------------------------
+Copy and paste this command:
+
+cd "C:\Users\ruanc\source\repos\Virtual C-Suite\raindrop-csuite\virtual-c-suite"
+
+Press: Enter
+
+
+STEP 3: Deploy Application
+---------------------------
+Copy and paste this command:
+
+raindrop build deploy --start
+
+Press: Enter
+
+
+WHAT TO EXPECT:
+- You'll see "Building to..." message
+- Type checking will run (may take 30-60 seconds)
+- Upload will begin
+- Services will start
+- Total time: 2-5 minutes
+
+
+STEP 4: Verify Deployment
+--------------------------
+After deployment completes, run:
+
+raindrop build status
+
+You should see:
+  Application: virtual-c-suite
+  Status: running
+
+
+STEP 5: Get Your API URL
+-------------------------
+Run:
+
+raindrop build find
+
+Copy the URL shown for "upload-api"
+
+
+STEP 6: Test It
+---------------
+Create a test file: test-sales.csv
+Content:
+Product,Revenue,Cost
+Widget A,5000,3000
+Widget B,3000,2000
+
+Then test upload (replace YOUR-URL with actual URL):
+
+curl -X POST YOUR-URL/upload -F "file=@test-sales.csv" -F "userId=test-123"
+
+
+TROUBLESHOOTING:
+----------------
+Error: "Application not found"
+  Solution: Make sure you ran "raindrop build deploy --start"
+
+Error: "Permission denied"
+  Solution: Run "raindrop auth login" first
+
+Error: Still stuck?
+  Solution: Run "raindrop logs tail" to see what's happening
+
+
+================================================================================
+                      QUESTIONS? CHECK DEPLOYMENT.MD
+================================================================================
