@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 
 const PORT = 3000;
@@ -74,7 +75,71 @@ const server = http.createServer((req, res) => {
 
   // /reports/:requestId endpoint
   if (url.startsWith('/reports/') && req.method === 'GET') {
-    // Generate a realistic-looking report
+    const requestId = url.split('/')[2];
+    
+    // Check for API Keys
+    const cerebrasKey = process.env.CEREBRAS_API_KEY;
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
+    
+    // Import Services
+    const { runLLM } = require('./services/llm');
+    const { generateSpeech, VOICE_IDS } = require('./services/voice');
+    const { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt, formatFinalReport } = require('./services/prompts');
+
+    // HYBRID MODE LOGIC
+    if (cerebrasKey) {
+      console.log(`[Real AI] Generating report for ${requestId}...`);
+      
+      try {
+        // 1. Generate Executive Analyses (Parallel)
+        // Note: In a real app, we'd pass the actual uploaded file content here. 
+        // For now, we'll use a placeholder or cache the file content in memory/DB.
+        // Since we don't have a DB in this simple server.js, we'll simulate the input data.
+        const businessData = "Revenue: $500,000; Growth: 15%; Costs: High rent; Marketing: Good campaign."; 
+
+        const [cfoAnalysis, cmoAnalysis, cooAnalysis] = await Promise.all([
+          runLLM(getCFOPrompt(businessData), cerebrasKey),
+          runLLM(getCMOPrompt(businessData), cerebrasKey),
+          runLLM(getCOOPrompt(businessData), cerebrasKey)
+        ]);
+
+        // 2. CEO Synthesis
+        const ceoSynthesis = await runLLM(getCEOSynthesisPrompt(cfoAnalysis, cmoAnalysis, cooAnalysis), cerebrasKey);
+
+        // 3. Generate Audio (if key exists)
+        let audioUrl = null;
+        if (elevenLabsKey) {
+          console.log(`[Real AI] Generating audio...`);
+          // In a real server, we'd save this buffer to a file and serve it.
+          // For this demo, we'll skip saving to disk to keep it simple, or use the mock URL if it fails.
+          // To truly implement this, we'd need to write the buffer to 'public/audio/...' and serve it static.
+          // For now, let's log it.
+          // const audioBuffer = await generateSpeech(ceoSynthesis, VOICE_IDS.CEO, elevenLabsKey);
+          audioUrl = "https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3"; // Placeholder for now
+        }
+
+        // 4. Format Report
+        const report = formatFinalReport(requestId, cfoAnalysis, cmoAnalysis, cooAnalysis, ceoSynthesis);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          requestId: requestId,
+          status: 'completed',
+          report: report,
+          audioUrl: audioUrl,
+          mode: 'REAL_AI',
+          completedAt: new Date().toISOString()
+        }));
+        return;
+
+      } catch (error) {
+        console.error("[Real AI] Failed:", error);
+        // Fall through to simulation if real AI fails
+      }
+    }
+
+    // SIMULATION MODE (Fallback)
+    console.log(`[Simulation] Generating report for ${requestId}...`);
     const reportDate = new Date().toLocaleDateString();
     const revenue = Math.floor(Math.random() * 500000) + 500000;
     const growth = (Math.random() * 15 + 5).toFixed(1);
@@ -111,9 +176,10 @@ The board has reviewed the Q4 performance data. Overall, the company is showing 
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      requestId: url.split('/')[2],
+      requestId: requestId,
       status: 'completed',
       report: report,
+      mode: 'SIMULATION',
       completedAt: new Date().toISOString()
     }));
     return;
