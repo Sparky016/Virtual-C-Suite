@@ -1,32 +1,42 @@
-// Virtual C-Suite - Main Entry Point
-import { App } from '@raindrop/core';
-import { Router } from '@raindrop/router';
-import { Dashboard } from './components/Dashboard';
-import { ExecutiveTeam } from './components/ExecutiveTeam';
+import { Dashboard } from './components/Dashboard.js';
+import { ExecutiveTeam } from './components/ExecutiveTeam.js';
+import { TestRunner } from './components/TestRunner.js';
 
-const app = new App({
-  name: 'Virtual C-Suite',
-  version: '1.0.0'
-});
+const routes = {
+  '/': Dashboard,
+  '/executives': ExecutiveTeam,
+  '/tests': TestRunner
+};
 
-const router = new Router();
+function navigate(path) {
+  window.history.pushState({}, '', path);
+  handleRoute();
+}
 
-// Define routes
-router.get('/', () => {
-  return Dashboard.render();
-});
+function handleRoute() {
+  const path = window.location.pathname;
+  const Component = routes[path] || Dashboard;
+  document.getElementById('app').innerHTML = Component.render();
+  
+  // Initialize component logic if available
+  if (Component.setup) {
+    Component.setup();
+  }
+  
+  // Update active nav state
+  document.querySelectorAll('nav button').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.getAttribute('onclick').includes(path)) {
+      btn.classList.add('active');
+    }
+  });
+}
 
-router.get('/executives', () => {
-  return ExecutiveTeam.render();
-});
+window.onpopstate = handleRoute;
+window.navigate = navigate; // Expose to global scope for onclick handlers
 
-app.use(router);
+// Initial load
+handleRoute();
 
-// Start the application
-app.start().then(() => {
-  console.log('Virtual C-Suite is running!');
-}).catch(error => {
-  console.error('Failed to start application:', error);
-});
-
-export { app };
+// Application is running via handleRoute()
+console.log('Virtual C-Suite is running!');

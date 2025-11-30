@@ -1,0 +1,5 @@
+Date,Item,Category,Units Sold
+2023-10-01,Croissant,Pastry,150
+2023-10-01,Baguette,Bread
+2023-10-01,Espresso,Beverage,200,EXTRA_COLUMN
+Broken Row

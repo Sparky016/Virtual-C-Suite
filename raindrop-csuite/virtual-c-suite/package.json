@@ -5,7 +5,7 @@
   "description": "LiquidMetal AI app",
   "scripts": {
     "build": "shx rm -rf dist && tsc -b",
-    "start": "raindrop build deploy --start",
+    "start": "node server.js",
     "stop": "raindrop build stop",
     "restart": "raindrop build deploy --start",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",

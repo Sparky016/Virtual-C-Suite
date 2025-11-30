@@ -5,6 +5,7 @@ import {
 } from "@liquidmetal-ai/raindrop-framework";
 import { Env } from './raindrop.gen';
 import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt, formatFinalReport } from '../shared/prompts';
+import { generateSpeech, VOICE_IDS } from '../shared/elevenlabs';
 
 export default class extends Each<BucketEventNotification, Env> {
   async process(message: Message<BucketEventNotification>): Promise<void> {
@@ -125,13 +126,38 @@ export default class extends Each<BucketEventNotification, Env> {
       const ceoSynthesis = ceoResult.choices[0]?.message?.content || 'Synthesis unavailable';
 
       // Generate final report
-      const finalReport = formatFinalReport(
+      let finalReport = formatFinalReport(
         requestId,
         cfoAnalysis,
         cmoAnalysis,
         cooAnalysis,
         ceoSynthesis
       );
+
+      // Generate Audio for the report (CEO Synthesis)
+      console.log('Generating audio for CEO synthesis...');
+      let audioKey: string | undefined;
+      try {
+        const apiKey = (this.env as any).ELEVENLABS_API_KEY;
+        if (apiKey) {
+          const audioBuffer = await generateSpeech(ceoSynthesis, VOICE_IDS.CEO, apiKey);
+          audioKey = `reports/${requestId}/ceo-synthesis.mp3`;
+          await this.env.OUTPUT_BUCKET.put(audioKey, new Uint8Array(audioBuffer), {
+            httpMetadata: { contentType: 'audio/mpeg' }
+          });
+          console.log(`Audio generated and saved to ${audioKey}`);
+        } else {
+          console.warn('ELEVENLABS_API_KEY not found in environment');
+        }
+      } catch (error) {
+        console.error('Failed to generate audio:', error);
+      }
+
+      // Append audio link to final report if generated
+      if (audioKey) {
+        const audioNote = `\n\n## 🎧 Audio Summary\n\nAn audio version of the CEO synthesis is available: [Play Audio](/api/file/${encodeURIComponent(audioKey)})`;
+        finalReport += audioNote;
+      }
 
       // Save report to output bucket
       const reportKey = `reports/${requestId}/final-report.md`;
