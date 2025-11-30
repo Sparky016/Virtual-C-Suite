@@ -4,267 +4,169 @@ import {
   Message,
 } from "@liquidmetal-ai/raindrop-framework";
 import { Env } from './raindrop.gen';
+import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt, formatFinalReport } from '../shared/prompts';
 
 export default class extends Each<BucketEventNotification, Env> {
   async process(message: Message<BucketEventNotification>): Promise<void> {
-    const { event } = message;
-    
+    const event = message.body;
+
     console.log('Bucket event received:', {
-      eventName: event.eventName,
-      bucketName: event.bucketName,
-      objectKey: event.objectKey,
-      size: event.size,
-      contentType: event.contentType,
+      action: event.action,
+      bucket: event.bucket,
+      objectKey: event.object.key,
+      size: event.object.size,
+      eventTime: event.eventTime,
       timestamp: new Date().toISOString()
     });
 
-    switch (event.eventName) {
-      case 'ObjectCreated:Put':
-        await this.handleFileUpload(event);
-        break;
-      
-      case 'ObjectRemoved:Delete':
-        await this.handleFileDeletion(event);
-        break;
-      
-      case 'ObjectCreated:Post':
-        await this.handleMultiPartUpload(event);
-        break;
-      
-      default:
-        console.log('Unhandled event type:', event.eventName);
+    if (event.action === 'PutObject' || event.action === 'CompleteMultipartUpload') {
+      await this.handleFileUpload(event);
     }
   }
 
   // === File Upload Handler ===
   private async handleFileUpload(event: BucketEventNotification): Promise<void> {
+    const startTime = Date.now();
+    let requestId: string | undefined;
+
     try {
-      console.log(`Processing uploaded file: ${event.objectKey}`);
-      
-      // Example: Extract file information
-      const fileInfo = {
-        key: event.objectKey,
-        size: event.size,
-        contentType: event.contentType,
-        uploadedAt: new Date().toISOString()
-      };
-      
-      console.log('File info:', fileInfo);
+      console.log(`Processing uploaded file: ${event.object.key}`);
 
-      // Example: Call an actor to process the file
-      // const processor = this.env.FILE_PROCESSOR_ACTOR;
-      // await processor.postMessage({
-      //   type: 'processFile',
-      //   data: fileInfo
-      // });
-
-      // Example: Store file metadata in KV cache
-      // const metadataCache = this.env.FILE_METADATA_KV;
-      // await metadataCache.put(
-      //   `file:${event.objectKey}`, 
-      //   JSON.stringify(fileInfo),
-      //   { expirationTtl: 86400 } // 24 hours
-      // );
-
-      // Example: Send notification to queue
-      // const notificationQueue = this.env.NOTIFICATION_QUEUE;
-      // await notificationQueue.send({
-      //   body: JSON.stringify({
-      //     type: 'file_uploaded',
-      //     fileInfo,
-      //     timestamp: new Date().toISOString()
-      //   })
-      // });
-
-      // Example: If it's an image, trigger thumbnail generation
-      if (event.contentType?.startsWith('image/')) {
-        await this.triggerImageProcessing(event);
+      // Extract request ID from object metadata or key
+      const file = await this.env.INPUT_BUCKET.get(event.object.key);
+      if (!file) {
+        console.error('File not found in bucket:', event.object.key);
+        return;
       }
 
-      // Example: If it's a document, trigger text extraction
-      if (this.isDocumentType(event.contentType)) {
-        await this.triggerDocumentProcessing(event);
+      requestId = file.customMetadata?.requestId as string;
+      if (!requestId) {
+        console.error('No requestId in metadata');
+        return;
       }
+
+      console.log(`Starting analysis for request: ${requestId}`);
+
+      // Read file content
+      const fileContent = await file.text();
+      console.log(`File content length: ${fileContent.length} characters`);
+
+      // SCATTER: Parallel AI analysis from three expert perspectives
+      console.log('Starting parallel AI analysis...');
+      const aiStartTime = Date.now();
+
+      const [cfoResult, cmoResult, cooResult] = await Promise.all([
+        // CFO Analysis
+        this.env.AI.run('llama-3.3-70b', {
+          model: 'llama-3.3-70b',
+          messages: [{ role: 'user', content: getCFOPrompt(fileContent) }],
+          temperature: 0.7,
+          max_tokens: 800
+        }),
+
+        // CMO Analysis
+        this.env.AI.run('llama-3.3-70b', {
+          model: 'llama-3.3-70b',
+          messages: [{ role: 'user', content: getCMOPrompt(fileContent) }],
+          temperature: 0.7,
+          max_tokens: 800
+        }),
+
+        // COO Analysis
+        this.env.AI.run('llama-3.3-70b', {
+          model: 'llama-3.3-70b',
+          messages: [{ role: 'user', content: getCOOPrompt(fileContent) }],
+          temperature: 0.7,
+          max_tokens: 800
+        })
+      ]);
+
+      const aiDuration = Date.now() - aiStartTime;
+      console.log(`Parallel AI analysis completed in ${aiDuration}ms`);
+
+      // Extract analysis text
+      const cfoAnalysis = cfoResult.choices[0]?.message?.content || 'Analysis unavailable';
+      const cmoAnalysis = cmoResult.choices[0]?.message?.content || 'Analysis unavailable';
+      const cooAnalysis = cooResult.choices[0]?.message?.content || 'Analysis unavailable';
+
+      // Store individual executive analyses in database
+      const createdAt = Date.now();
+      await Promise.all([
+        this.env.TRACKING_DB.prepare(
+          `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
+           VALUES (?, ?, ?, ?)`
+        ).bind(requestId, 'CFO', cfoAnalysis, createdAt).run(),
+
+        this.env.TRACKING_DB.prepare(
+          `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
+           VALUES (?, ?, ?, ?)`
+        ).bind(requestId, 'CMO', cmoAnalysis, createdAt).run(),
+
+        this.env.TRACKING_DB.prepare(
+          `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
+           VALUES (?, ?, ?, ?)`
+        ).bind(requestId, 'COO', cooAnalysis, createdAt).run()
+      ]);
+
+      // GATHER: CEO Synthesis
+      console.log('Starting CEO synthesis...');
+      const synthesisStartTime = Date.now();
+
+      const ceoResult = await this.env.AI.run('llama-3.3-70b', {
+        model: 'llama-3.3-70b',
+        messages: [{ role: 'user', content: getCEOSynthesisPrompt(cfoAnalysis, cmoAnalysis, cooAnalysis) }],
+        temperature: 0.8,
+        max_tokens: 1000
+      });
+
+      const synthesisDuration = Date.now() - synthesisStartTime;
+      console.log(`CEO synthesis completed in ${synthesisDuration}ms`);
+
+      const ceoSynthesis = ceoResult.choices[0]?.message?.content || 'Synthesis unavailable';
+
+      // Generate final report
+      const finalReport = formatFinalReport(
+        requestId,
+        cfoAnalysis,
+        cmoAnalysis,
+        cooAnalysis,
+        ceoSynthesis
+      );
+
+      // Save report to output bucket
+      const reportKey = `reports/${requestId}/final-report.md`;
+      await this.env.OUTPUT_BUCKET.put(reportKey, finalReport);
+
+      // Store final report in database
+      const reportCreatedAt = Date.now();
+      await this.env.TRACKING_DB.prepare(
+        `INSERT INTO final_reports (request_id, report_content, report_key, created_at)
+         VALUES (?, ?, ?, ?)`
+      ).bind(requestId, finalReport, reportKey, reportCreatedAt).run();
+
+      // Update request status to completed
+      const completedAt = Date.now();
+      await this.env.TRACKING_DB.prepare(
+        `UPDATE analysis_requests
+         SET status = ?, completed_at = ?
+         WHERE request_id = ?`
+      ).bind('completed', completedAt, requestId).run();
+
+      const totalDuration = Date.now() - startTime;
+      console.log(`Total processing completed in ${totalDuration}ms for request ${requestId}`);
 
     } catch (error) {
-      console.error('Error handling file upload:', error);
-      
-      // Example: Send error notification
-      // const errorQueue = this.env.ERROR_QUEUE;
-      // await errorQueue.send({
-      //   body: JSON.stringify({
-      //     type: 'file_upload_error',
-      //     error: error.message,
-      //     fileInfo: {
-      //       key: event.objectKey,
-      //       bucket: event.bucketName
-      //     },
-      //     timestamp: new Date().toISOString()
-      //   })
-      // });
-    }
-  }
+      console.error('Error processing file:', error);
 
-  // === File Deletion Handler ===
-  private async handleFileDeletion(event: BucketEventNotification): Promise<void> {
-    console.log(`Processing deleted file: ${event.objectKey}`);
-    
-    // Example: Clean up related data
-    // const metadataCache = this.env.FILE_METADATA_KV;
-    // await metadataCache.delete(`file:${event.objectKey}`);
-
-    // Example: Notify other services
-    // const cleanupQueue = this.env.CLEANUP_QUEUE;
-    // await cleanupQueue.send({
-    //   body: JSON.stringify({
-    //     type: 'file_deleted',
-    //     fileKey: event.objectKey,
-    //     timestamp: new Date().toISOString()
-    //   })
-    // });
-
-    // Example: Update search index
-    // if (this.env.SMART_BUCKET) {
-    //   try {
-    //     // Remove from search index
-    //     await this.env.SMART_BUCKET.delete({
-    //       key: event.objectKey
-    //     });
-    //     console.log(`Removed ${event.objectKey} from search index`);
-    //   } catch (error) {
-    //     console.error('Failed to remove from search index:', error);
-    //   }
-    // }
-  }
-
-  // === Multi-part Upload Handler ===
-  private async handleMultiPartUpload(event: BucketEventNotification): Promise<void> {
-    console.log(`Processing multipart upload: ${event.objectKey}`);
-    
-    // Example: Trigger post-upload processing
-    // const postProcessor = this.env.POST_UPLOAD_ACTOR;
-    // await postProcessor.postMessage({
-    //   type: 'processMultipartUpload',
-    //   data: {
-    //     key: event.objectKey,
-    //     size: event.size,
-    //     contentType: event.contentType
-    //   }
-    // });
-  }
-
-  // === Image Processing Example ===
-  private async triggerImageProcessing(event: BucketEventNotification): Promise<void> {
-    console.log(`Triggering image processing for: ${event.objectKey}`);
-    
-    // Example: Call image processing actor
-    // const imageProcessor = this.env.IMAGE_PROCESSOR_ACTOR;
-    // await imageProcessor.postMessage({
-    //   type: 'generateThumbnails',
-    //   data: {
-    //     sourceKey: event.objectKey,
-    //     bucket: event.bucketName,
-    //     contentType: event.contentType
-    //   }
-    // });
-
-    // Example: Extract EXIF data
-    // const exifExtractor = this.env.EXIF_EXTRACTOR_ACTOR;
-    // await exifExtractor.postMessage({
-    //   type: 'extractExif',
-    //   data: { key: event.objectKey }
-    // });
-  }
-
-  // === Document Processing Example ===
-  private async triggerDocumentProcessing(event: BucketEventNotification): Promise<void> {
-    console.log(`Triggering document processing for: ${event.objectKey}`);
-    
-    // Example: Extract text and add to SmartBucket for search
-    // const documentProcessor = this.env.DOCUMENT_PROCESSOR_ACTOR;
-    // await documentProcessor.postMessage({
-    //   type: 'extractAndIndex',
-    //   data: {
-    //     key: event.objectKey,
-    //     bucket: event.bucketName,
-    //     contentType: event.contentType
-    //   }
-    // });
-
-    // Example: Generate document summary
-    // const summarizer = this.env.DOCUMENT_SUMMARIZER_ACTOR;
-    // await summarizer.postMessage({
-    //   type: 'summarize',
-    //   data: { key: event.objectKey }
-    // });
-  }
-
-  // === Utility Functions ===
-  private isDocumentType(contentType?: string): boolean {
-    if (!contentType) return false;
-    
-    const documentTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'text/markdown',
-      'text/csv'
-    ];
-    
-    return documentTypes.includes(contentType);
-  }
-
-  // === Advanced Examples ===
-
-  // Example: Batch processing for multiple files
-  private async batchProcessFiles(events: BucketEventNotification[]): Promise<void> {
-    console.log(`Batch processing ${events.length} files`);
-    
-    // Group by content type
-    const grouped = events.reduce((acc, event) => {
-      const type = event.contentType || 'unknown';
-      if (!acc[type]) acc[type] = [];
-      acc[type].push(event);
-      return acc;
-    }, {} as Record<string, BucketEventNotification[]>);
-
-    // Process each group
-    for (const [contentType, files] of Object.entries(grouped)) {
-      console.log(`Processing ${files.length} files of type: ${contentType}`);
-      
-      if (contentType.startsWith('image/')) {
-        // Process images in batch
-        // const batchProcessor = this.env.IMAGE_BATCH_PROCESSOR;
-        // await batchProcessor.postMessage({
-        //   type: 'batchProcess',
-        //   data: files.map(f => ({ key: f.objectKey, bucket: f.bucketName }))
-        // });
+      // Update request status to failed
+      if (requestId) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        await this.env.TRACKING_DB.prepare(
+          `UPDATE analysis_requests
+           SET status = ?, error_message = ?
+           WHERE request_id = ?`
+        ).bind('failed', errorMessage, requestId).run();
       }
     }
-  }
-
-  // Example: File validation
-  private async validateFile(event: BucketEventNotification): Promise<{ valid: boolean; reason?: string }> {
-    // Check file size
-    const maxSize = 100 * 1024 * 1024; // 100MB
-    if (event.size && event.size > maxSize) {
-      return { valid: false, reason: 'File too large' };
-    }
-
-    // Check content type
-    const allowedTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'application/pdf',
-      'text/plain'
-    ];
-
-    if (event.contentType && !allowedTypes.includes(event.contentType)) {
-      return { valid: false, reason: 'Unsupported file type' };
-    }
-
-    return { valid: true };
   }
 }
