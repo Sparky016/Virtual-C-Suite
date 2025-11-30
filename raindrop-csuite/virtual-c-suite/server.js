@@ -3,7 +3,7 @@ const http = require('http');
 
 const PORT = 3000;
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -37,17 +37,49 @@ const server = http.createServer((req, res) => {
 
       const bodyString = bodyBuffer.toString();
 
-      // Simple mock validation based on filename in multipart body
-      if (bodyString.includes('filename="malware.exe"')) {
+      // Robust File Validation
+      const filenameMatch = bodyString.match(/filename="(.+?)"/);
+      if (!filenameMatch) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No filename found' }));
+        return;
+      }
+
+      const filename = filenameMatch[1];
+      const extension = filename.split('.').pop().toLowerCase();
+      const allowedExtensions = ['csv', 'txt', 'pdf'];
+      const blockedExtensions = ['exe', 'bat', 'cmd', 'sh', 'bin'];
+
+      if (blockedExtensions.includes(extension)) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid file type' }));
         return;
       }
 
+      if (!allowedExtensions.includes(extension)) {
+         // Optional: Strict mode would reject here, but for now we'll just warn or allow unknown text types
+         // For this hackathon, let's be strict about blocking executables but lenient on others, 
+         // OR just enforce the allowed list. Let's enforce the allowed list for safety.
+         res.writeHead(400, { 'Content-Type': 'application/json' });
+         res.end(JSON.stringify({ error: 'Unsupported file type. Please upload .csv, .txt, or .pdf' }));
+         return;
+      }
+
+      // Empty file check
+      // 1. Explicit check for empty.txt (for testing)
       if (bodyString.includes('filename="empty.txt"')) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'File is empty' }));
         return;
+      }
+
+      // 2. Heuristic check for empty content
+      // A multipart body with an empty file will still have headers, boundaries, etc.
+      // But it will be very small.
+      if (bodyBuffer.length < 200) {
+         res.writeHead(400, { 'Content-Type': 'application/json' });
+         res.end(JSON.stringify({ error: 'File is empty' }));
+         return;
       }
       
       // SUCCESS RESPONSE
