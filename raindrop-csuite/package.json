@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@liquidmetal-ai/raindrop-framework": "^0.11.0",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "sambanova": "^0.1.0"
   }
 }

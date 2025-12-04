@@ -3,7 +3,7 @@
 import { UploadRequest, UploadResponse, StatusResponse, ReportResponse, Env } from './interfaces';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_FILE_TYPE = 'application/pdf';
+const ALLOWED_FILE_TYPES = ['application/pdf', 'text/csv', 'text/plain'];
 
 /**
  * Validation result for file upload requests
@@ -66,9 +66,9 @@ function validateFile(file: File | string | null, env: Env): ValidationResult {
  * Validates file MIME type matches allowed type
  */
 function validateFileType(file: File, env: Env): ValidationResult {
-  if (file.type !== ALLOWED_FILE_TYPE) {
+  if (!ALLOWED_FILE_TYPES.includes(file.type)) {
     env.logger.warn('Upload validation failed: Invalid file format', { type: file.type });
-    return { valid: false, error: 'Invalid file format. Only PDF files are accepted' };
+    return { valid: false, error: 'Invalid file format. Only PDF, CSV, and TXT files are accepted' };
   }
   return { valid: true, file };
 }
@@ -106,135 +106,78 @@ function buildBucketKey(requestId: string, fileName: string): string {
 }
 
 /**
- * Creates a new analysis request record in the database with pending status
+ * Creates a new analysis request marker (optional in bucket-based flow, implied by input file)
  */
 export async function createAnalysisRequest(requestId: string, fileName: string, env: Env): Promise<void> {
-  const query = buildInsertRequestQuery();
-  const params = [requestId, fileName, 'pending'];
-
-  try {
-    await env.ANALYSIS_DB.execute(query, params);
-    env.logger.debug('Analysis request created in database', { requestId, fileName });
-  } catch (error) {
-    env.logger.error('Failed to create analysis request', { error: String(error), requestId });
-    throw new Error('Failed to create analysis request');
-  }
+  // In bucket-based architecture, the presence of the input file initiates the process.
+  // We don't need to insert into a DB.
+  env.logger.debug('Analysis request initiated (file stored)', { requestId, fileName });
 }
 
 /**
- * Constructs SQL query for inserting new analysis request
- */
-function buildInsertRequestQuery(): string {
-  return `
-    INSERT INTO analysis_requests (request_id, file_name, status, created_at)
-    VALUES (?, ?, ?, datetime('now'))
-  `;
-}
-
-/**
- * Retrieves the current status of an analysis request
+ * Retrieves the current status of an analysis request by checking bucket contents
  */
 export async function getRequestStatus(requestId: string, env: Env): Promise<StatusResponse> {
   try {
-    const query = buildStatusQuery();
-    const result = await env.ANALYSIS_DB.execute(query, [requestId]);
+    // Check for output report first (completed)
+    const reportKey = `reports/${requestId}.md`;
+    const reportExists = await env.OUTPUT_BUCKET.head(reportKey);
 
-    validateQueryResult(result, requestId, env);
+    if (reportExists) {
+      return { requestId, status: 'completed' };
+    }
 
-    const row = result.results[0];
-    env.logger.debug('Retrieved request status', { requestId, status: row.status });
+    // Check for input file (processing/pending)
+    // We need to list because we don't know the filename extension in the input bucket key
+    // Expected key: uploads/{requestId}/{filename}
+    const list = await env.INPUT_BUCKET.list({ prefix: `uploads/${requestId}/` });
 
-    return buildStatusResponse(row, requestId);
+    if (list.objects.length > 0) {
+      return { requestId, status: 'processing' };
+    }
+
+    throw new Error('Request not found');
   } catch (error) {
     env.logger.error('Failed to get request status', { error: String(error), requestId });
     throw error;
   }
 }
 
-/**
- * Constructs SQL query for retrieving request status
- */
-function buildStatusQuery(): string {
-  return 'SELECT request_id, status FROM analysis_requests WHERE request_id = ?';
-}
 
-/**
- * Validates database query result contains data
- */
-function validateQueryResult(result: any, requestId: string, env: Env): void {
-  if (!result.results || result.results.length === 0) {
-    env.logger.warn('Request not found', { requestId });
-    throw new Error('Request not found');
-  }
-}
-
-/**
- * Constructs status response from database row
- */
-function buildStatusResponse(row: any, requestId: string): StatusResponse {
-  return {
-    requestId: row.request_id || requestId,
-    status: row.status
-  };
-}
 
 /**
  * Retrieves completed analysis report or current status
  */
 export async function getReport(requestId: string, env: Env): Promise<ReportResponse> {
   try {
-    const query = buildReportQuery();
-    const result = await env.ANALYSIS_DB.execute(query, [requestId]);
+    const reportKey = `reports/${requestId}.md`;
+    const reportObject = await env.OUTPUT_BUCKET.get(reportKey);
 
-    validateQueryResult(result, requestId, env);
-
-    const row = result.results[0];
-    return await buildReportResponse(row, requestId, env);
-  } catch (error) {
-    env.logger.error('Failed to get report', { error: String(error), requestId });
-    throw error;
-  }
-}
-
-/**
- * Constructs SQL query for retrieving report data
- */
-function buildReportQuery(): string {
-  return 'SELECT request_id, status, report_url FROM analysis_requests WHERE request_id = ?';
-}
-
-/**
- * Constructs report response, fetching completed report if available
- */
-async function buildReportResponse(row: any, requestId: string, env: Env): Promise<ReportResponse> {
-  const isCompleted = row.status === 'completed' && row.report_url;
-
-  if (isCompleted) {
-    const reportText = await fetchCompletedReport(row.report_url, env);
-    if (reportText) {
-      env.logger.debug('Retrieved completed report', { requestId });
+    if (reportObject) {
+      const reportText = await reportObject.text();
       return {
-        requestId: row.request_id || requestId,
-        status: row.status,
+        requestId,
+        status: 'completed',
         report: reportText
       };
     }
+
+    // If report not found, check status
+    const status = await getRequestStatus(requestId, env);
+    return {
+      requestId,
+      status: status.status
+    };
+
+  } catch (error) {
+    env.logger.error('Failed to get report', { error: String(error), requestId });
+    throw error; // Or return 404
   }
-
-  env.logger.debug('Retrieved report status', { requestId, status: row.status });
-  return {
-    requestId: row.request_id || requestId,
-    status: row.status
-  };
 }
 
-/**
- * Fetches completed report content from output bucket
- */
-async function fetchCompletedReport(reportUrl: string, env: Env): Promise<string | null> {
-  const reportObject = await env.OUTPUT_BUCKET.get(reportUrl);
-  return reportObject ? await reportObject.text() : null;
-}
+
+
+
 
 /**
  * Generates unique request identifier combining timestamp and random string

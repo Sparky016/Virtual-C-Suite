@@ -25,7 +25,7 @@ export interface ReportResponse {
 export interface Env {
   INPUT_BUCKET: any;
   OUTPUT_BUCKET: any;
-  ANALYSIS_DB: any;
+
   logger: Logger;
 }
 

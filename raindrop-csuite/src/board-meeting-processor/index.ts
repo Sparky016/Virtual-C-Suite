@@ -5,9 +5,10 @@ import {
   extractRequestIdFromKey,
   fetchFileContent,
   runParallelAnalyses,
-  updateAnalysisStatus,
+  extractRequestIdFromKey,
+  fetchFileContent,
+  runParallelAnalyses,
   saveReportToOutputBucket,
-  saveExecutiveAnalyses,
   saveFinalReport
 } from './utils';
 
@@ -23,13 +24,13 @@ async function handleBucketEvent(event: BucketEvent, env: Env): Promise<void> {
       size: event.size
     });
 
-    await updateAnalysisStatus(requestId, 'processing', env);
+
 
     const fileContent = await fetchFileContent(event.key, env);
 
     const analyses = await runParallelAnalyses(fileContent, env);
 
-    await saveExecutiveAnalyses(requestId, analyses, env);
+
 
     const synthesis = await env.ANALYSIS_COORDINATOR.synthesize(analyses, env);
 
@@ -56,9 +57,7 @@ async function handleBucketEvent(event: BucketEvent, env: Env): Promise<void> {
       error: String(error)
     });
 
-    if (requestId) {
-      await updateAnalysisStatus(requestId, 'failed', env);
-    }
+
 
     throw error;
   }

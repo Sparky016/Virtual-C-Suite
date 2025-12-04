@@ -1,6 +1,7 @@
 // board-meeting-processor utility functions
 
 import { BucketEvent, ExecutiveAnalysis, SynthesizedReport, Env } from './interfaces';
+import SambaNova from 'sambanova';
 
 const BUCKET_KEY_PATTERN = /uploads\/([^\/]+)\//;
 const EXPECTED_KEY_FORMAT = 'uploads/req-xxx/filename';
@@ -49,7 +50,7 @@ function validateFileExists(fileObject: any, key: string): void {
 }
 
 const EXECUTIVE_ROLES: Array<'CFO' | 'CMO' | 'COO'> = ['CFO', 'CMO', 'COO'];
-const AI_MODEL = 'gpt-4';
+const AI_MODEL = 'Meta-Llama-3.3-70B-Instruct';
 const AI_TEMPERATURE = 0.7;
 
 /**
@@ -84,11 +85,12 @@ async function performRoleAnalysis(content: string, role: 'CFO' | 'CMO' | 'COO',
   }
 }
 
-/**
- * Calls AI service with configured model and parameters
- */
 async function callAI(prompt: string, env: Env): Promise<any> {
-  return await env.AI.run({
+  const client = new SambaNova({
+    apiKey: env.SAMBANOVA_API_KEY,
+  });
+
+  return await client.chat.completions.create({
     model: AI_MODEL,
     messages: [{ role: 'user', content: prompt }],
     temperature: AI_TEMPERATURE
@@ -145,29 +147,9 @@ function extractRecommendations(parsed: any): string[] {
   return parsed.recommendations || parsed.Recommendations || [];
 }
 
-/**
- * Updates analysis request status in database
- */
-export async function updateAnalysisStatus(requestId: string, status: string, env: Env): Promise<void> {
-  try {
-    env.logger.debug('Updating analysis status', { requestId, status });
 
-    const query = buildUpdateStatusQuery();
-    await env.ANALYSIS_DB.execute(query, [status, requestId]);
 
-    env.logger.debug('Analysis status updated', { requestId, status });
-  } catch (error) {
-    env.logger.error('Failed to update analysis status', { requestId, status, error: String(error) });
-    throw error;
-  }
-}
 
-/**
- * Constructs SQL query for updating request status
- */
-function buildUpdateStatusQuery(): string {
-  return 'UPDATE analysis_requests SET status = ? WHERE request_id = ?';
-}
 
 /**
  * Saves synthesized report to output bucket as formatted JSON
@@ -175,9 +157,9 @@ function buildUpdateStatusQuery(): string {
 export async function saveReportToOutputBucket(report: SynthesizedReport, env: Env): Promise<string> {
   try {
     const reportKey = buildReportKey(report.requestId);
-    const reportJson = formatReportAsJson(report);
+    const reportMarkdown = formatReportAsMarkdown(report);
 
-    await env.OUTPUT_BUCKET.put(reportKey, reportJson);
+    await env.OUTPUT_BUCKET.put(reportKey, reportMarkdown);
 
     env.logger.info('Report saved to output bucket', { reportKey, requestId: report.requestId });
 
@@ -192,82 +174,42 @@ export async function saveReportToOutputBucket(report: SynthesizedReport, env: E
  * Constructs output bucket key for report storage
  */
 function buildReportKey(requestId: string): string {
-  return `reports/${requestId}.json`;
+  return `reports/${requestId}.md`;
 }
 
 /**
- * Formats report as pretty-printed JSON string
+ * Formats report as Markdown string
  */
-function formatReportAsJson(report: SynthesizedReport): string {
-  return JSON.stringify(report, null, 2);
-}
+function formatReportAsMarkdown(report: SynthesizedReport): string {
+  let markdown = `# Virtual C-Suite Strategic Report\n\n`;
+  markdown += `**Request ID:** ${report.requestId}\n`;
+  markdown += `**Date:** ${report.timestamp}\n\n`;
+  markdown += `## Executive Summary\n\n`;
+  markdown += report.consolidatedInsights.map(insight => `- ${insight}`).join('\n') + '\n\n';
+  markdown += `## Strategic Action Plan\n\n`;
+  markdown += report.actionItems.map((item, index) => `${index + 1}. ${item}`).join('\n') + '\n\n';
+  markdown += `## Detailed Executive Analysis\n\n`;
 
-/**
- * Persists all executive analyses to database for audit trail
- */
-export async function saveExecutiveAnalyses(requestId: string, analyses: ExecutiveAnalysis[], env: Env): Promise<void> {
-  try {
-    for (const analysis of analyses) {
-      await saveAnalysisRecord(requestId, analysis, env);
-    }
-
-    env.logger.debug('Executive analyses saved to database', { requestId, count: analyses.length });
-  } catch (error) {
-    env.logger.error('Failed to save executive analyses', { requestId, error: String(error) });
-    throw error;
+  for (const analysis of report.executiveAnalyses) {
+    markdown += `### ${analysis.role} Perspective\n\n`;
+    markdown += `${analysis.analysis}\n\n`;
+    markdown += `**Key Insights:**\n`;
+    markdown += analysis.keyInsights.map(i => `- ${i}`).join('\n') + '\n\n';
+    markdown += `**Recommendations:**\n`;
+    markdown += analysis.recommendations.map(r => `- ${r}`).join('\n') + '\n\n';
+    markdown += `---\n\n`;
   }
+
+  return markdown;
 }
 
-/**
- * Saves single executive analysis record to database
- */
-async function saveAnalysisRecord(requestId: string, analysis: ExecutiveAnalysis, env: Env): Promise<void> {
-  const query = buildInsertAnalysisQuery();
-  const params = buildAnalysisParams(requestId, analysis);
-  await env.ANALYSIS_DB.execute(query, params);
-}
 
-/**
- * Constructs SQL query for inserting executive analysis
- */
-function buildInsertAnalysisQuery(): string {
-  return `
-    INSERT INTO executive_analyses (request_id, role, analysis, key_insights, recommendations, created_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `;
-}
-
-/**
- * Builds parameter array for executive analysis insertion
- */
-function buildAnalysisParams(requestId: string, analysis: ExecutiveAnalysis): any[] {
-  return [
-    requestId,
-    analysis.role,
-    analysis.analysis,
-    JSON.stringify(analysis.keyInsights),
-    JSON.stringify(analysis.recommendations)
-  ];
-}
 
 /**
  * Updates request record with completed status and report URL
  */
 export async function saveFinalReport(requestId: string, reportUrl: string, env: Env): Promise<void> {
-  try {
-    const query = buildUpdateReportQuery();
-    await env.ANALYSIS_DB.execute(query, ['completed', reportUrl, requestId]);
-
-    env.logger.debug('Final report reference saved', { requestId, reportUrl });
-  } catch (error) {
-    env.logger.error('Failed to save final report reference', { requestId, error: String(error) });
-    throw error;
-  }
-}
-
-/**
- * Constructs SQL query for updating completed report reference
- */
-function buildUpdateReportQuery(): string {
-  return 'UPDATE analysis_requests SET status = ?, report_url = ? WHERE request_id = ?';
+  // In a bucket-only architecture, the presence of the report file indicates completion.
+  // We might optionally write a status file, but for now we just log it.
+  env.logger.debug('Final report saved', { requestId, reportUrl });
 }

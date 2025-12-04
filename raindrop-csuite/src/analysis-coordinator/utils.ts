@@ -1,6 +1,7 @@
 // analysis-coordinator utility functions
 
 import { ExecutiveAnalysis, SynthesisResult, PromptTemplate, Env } from './interfaces';
+import SambaNova from 'sambanova';
 
 const VALID_ROLES: Array<'CFO' | 'CMO' | 'COO'> = ['CFO', 'CMO', 'COO'];
 
@@ -125,20 +126,78 @@ function buildCOOTemplate(): PromptTemplate {
 /**
  * Synthesizes multiple executive analyses into consolidated insights and prioritized actions
  */
+/**
+ * Synthesizes multiple executive analyses into consolidated insights and prioritized actions
+ */
 export async function synthesize(analyses: ExecutiveAnalysis[], env: Env): Promise<SynthesisResult> {
   validateAnalyses(analyses);
 
   env.logger.info('Starting synthesis of executive analyses', { count: analyses.length });
 
-  const insights = extractInsights(analyses);
-  const actionItems = prioritizeActionItems(analyses);
+  const prompt = buildSynthesisPrompt(analyses);
+  const aiResponse = await callAI(prompt, env);
+  const synthesis = parseSynthesisResponse(aiResponse);
 
   env.logger.info('Synthesis complete', {
-    insightsCount: insights.length,
-    actionItemsCount: actionItems.length
+    insightsCount: synthesis.consolidatedInsights.length,
+    actionItemsCount: synthesis.actionItems.length
   });
 
-  return buildSynthesisResult(insights, actionItems);
+  return synthesis;
+}
+
+function buildSynthesisPrompt(analyses: ExecutiveAnalysis[]): string {
+  let prompt = `You are the CEO of the company. You have received reports from your CFO, CMO, and COO.
+Your goal is to synthesize these conflicting opinions into a final strategic summary and a prioritized action plan.
+
+Here are the reports:
+
+`;
+
+  for (const analysis of analyses) {
+    prompt += `--- ${analysis.role} REPORT ---\n`;
+    prompt += `${analysis.analysis}\n`;
+    prompt += `Key Insights: ${analysis.keyInsights.join(', ')}\n`;
+    prompt += `Recommendations: ${analysis.recommendations.join(', ')}\n\n`;
+  }
+
+  prompt += `
+Based on these reports, provide a consolidated strategic summary.
+Resolve conflicts between the executives (e.g. if CFO says cut costs but CMO says spend more, decide the best path).
+
+Please provide your response in JSON format with the following structure:
+{
+  "consolidatedInsights": ["insight1", "insight2", ...],
+  "actionItems": ["action1", "action2", ...]
+}
+`;
+
+  return prompt;
+}
+
+async function callAI(prompt: string, env: Env): Promise<any> {
+  const client = new SambaNova({
+    apiKey: env.SAMBANOVA_API_KEY,
+  });
+
+  return await client.chat.completions.create({
+    model: 'Meta-Llama-3.3-70B-Instruct',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.7
+  });
+}
+
+function parseSynthesisResponse(aiResponse: any): SynthesisResult {
+  const content = aiResponse.choices[0].message.content;
+  try {
+    return JSON.parse(content);
+  } catch {
+    // Fallback if JSON parsing fails
+    return {
+      consolidatedInsights: ["Failed to parse AI response"],
+      actionItems: ["Check logs for raw response"]
+    };
+  }
 }
 
 /**
@@ -153,130 +212,7 @@ function validateAnalyses(analyses: ExecutiveAnalysis[]): void {
 /**
  * Constructs synthesis result from insights and action items
  */
-function buildSynthesisResult(insights: string[], actionItems: string[]): SynthesisResult {
-  return {
-    consolidatedInsights: insights,
-    actionItems
-  };
-}
 
-const STOP_WORDS = new Set(['is', 'are', 'the', 'a', 'an', 'and', 'or', 'but']);
-
-/**
- * Normalizes text for comparison by removing stop words and sorting
- */
-function normalizeForComparison(text: string): string {
-  const words = extractSignificantWords(text);
-  return words.sort().join(' ');
-}
-
-/**
- * Extracts significant words by filtering out stop words
- */
-function extractSignificantWords(text: string): string[] {
-  return text.trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(word => !STOP_WORDS.has(word));
-}
-
-/**
- * Extracts and deduplicates insights from all analyses
- */
-export function extractInsights(analyses: ExecutiveAnalysis[]): string[] {
-  const allInsights: string[] = [];
-  const seenInsights = new Set<string>();
-
-  for (const analysis of analyses) {
-    addUniqueInsights(analysis.keyInsights, seenInsights, allInsights);
-  }
-
-  return allInsights;
-}
-
-/**
- * Adds insights to collection if not already seen
- */
-function addUniqueInsights(insights: string[], seenSet: Set<string>, resultArray: string[]): void {
-  for (const insight of insights) {
-    const normalized = normalizeForComparison(insight);
-    if (isUniqueInsight(normalized, seenSet)) {
-      seenSet.add(normalized);
-      resultArray.push(insight.trim());
-    }
-  }
-}
-
-/**
- * Checks if normalized insight is unique
- */
-function isUniqueInsight(normalized: string, seenSet: Set<string>): boolean {
-  return normalized.length > 0 && !seenSet.has(normalized);
-}
-
-/**
- * Prioritizes action items by frequency across analyses
- */
-export function prioritizeActionItems(analyses: ExecutiveAnalysis[]): string[] {
-  const itemFrequency = buildFrequencyMap(analyses);
-  return sortByFrequency(itemFrequency);
-}
-
-/**
- * Builds frequency map of all recommendations
- */
-function buildFrequencyMap(analyses: ExecutiveAnalysis[]): Map<string, number> {
-  const itemFrequency = new Map<string, number>();
-
-  for (const analysis of analyses) {
-    countRecommendations(analysis.recommendations, itemFrequency);
-  }
-
-  return itemFrequency;
-}
-
-/**
- * Counts recommendation occurrences in frequency map
- */
-function countRecommendations(recommendations: string[], frequencyMap: Map<string, number>): void {
-  for (const recommendation of recommendations) {
-    const normalized = recommendation.trim();
-    if (normalized) {
-      incrementFrequency(normalized, frequencyMap);
-    }
-  }
-}
-
-/**
- * Increments frequency count for item
- */
-function incrementFrequency(item: string, frequencyMap: Map<string, number>): void {
-  const currentCount = frequencyMap.get(item) || 0;
-  frequencyMap.set(item, currentCount + 1);
-}
-
-/**
- * Sorts items by frequency in descending order
- */
-function sortByFrequency(frequencyMap: Map<string, number>): string[] {
-  return Array.from(frequencyMap.entries())
-    .sort(compareByFrequency)
-    .map(extractItem);
-}
-
-/**
- * Compares frequency map entries for descending sort
- */
-function compareByFrequency(a: [string, number], b: [string, number]): number {
-  return b[1] - a[1];
-}
-
-/**
- * Extracts item from frequency map entry
- */
-function extractItem(entry: [string, number]): string {
-  return entry[0];
-}
 
 /**
  * Formats executive analysis as markdown report section

@@ -3,21 +3,41 @@ import {
   buildPrompt,
   getPromptTemplate,
   synthesize,
-  extractInsights,
-  prioritizeActionItems,
+  buildPrompt,
+  getPromptTemplate,
+  synthesize,
   formatAnalysisForReport,
 } from './utils';
+import SambaNova from 'sambanova';
+
+// Mock SambaNova
+vi.mock('sambanova', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  consolidatedInsights: ['Insight'],
+                  actionItems: ['Action']
+                })
+              }
+            }]
+          })
+        }
+      }
+    }))
+  };
+});
 
 describe('analysis-coordinator utils', () => {
   let mockEnv: any;
 
   beforeEach(() => {
     mockEnv = {
-      AI: {
-        run: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: 'AI response' } }],
-        }),
-      },
+      SAMBANOVA_API_KEY: 'test-key',
       logger: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -132,246 +152,77 @@ describe('analysis-coordinator utils', () => {
       expect(Array.isArray(result.actionItems)).toBe(true);
     });
 
-    it('should deduplicate similar insights', async () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: ['Revenue growth is strong', 'Strong revenue growth'],
-          recommendations: [],
-        },
-      ];
-
-      const result = await synthesize(analyses, mockEnv);
-
-      // Should combine similar insights into one
-      expect(result.consolidatedInsights.length).toBeLessThan(2);
-    });
-
-    it('should prioritize cross-functional recommendations', async () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Improve efficiency', 'Reduce costs'],
-        },
-        {
-          role: 'CMO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Improve efficiency', 'Expand market'],
-        },
-        {
-          role: 'COO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Improve efficiency'],
-        },
-      ];
-
-      const result = await synthesize(analyses, mockEnv);
-
-      // 'Improve efficiency' mentioned by all should be prioritized
-      expect(result.actionItems[0]).toContain('efficiency');
-    });
-
-    it('should handle empty analyses', async () => {
-      const analyses: any[] = [];
-
-      await expect(synthesize(analyses, mockEnv)).rejects.toThrow();
-    });
-
-    it('should log synthesis steps', async () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: ['insight'],
-          recommendations: ['rec'],
-        },
-      ];
-
-      await synthesize(analyses, mockEnv);
-
-      expect(mockEnv.logger.info).toHaveBeenCalled();
-    });
+    // Should call SambaNova
+    expect(SambaNova).toHaveBeenCalled();
   });
 
-  describe('extractInsights', () => {
-    it('should extract all insights from analyses', () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: ['Insight 1', 'Insight 2'],
-          recommendations: [],
-        },
-        {
-          role: 'CMO' as const,
-          analysis: 'Analysis',
-          keyInsights: ['Insight 3'],
-          recommendations: [],
-        },
-      ];
+  it('should handle empty analyses', async () => {
+    const analyses: any[] = [];
 
-      const insights = extractInsights(analyses);
-
-      expect(insights.length).toBeGreaterThanOrEqual(2);
-      expect(insights).toContain('Insight 1');
-      expect(insights).toContain('Insight 3');
-    });
-
-    it('should deduplicate identical insights', () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: ['Same insight', 'Unique insight'],
-          recommendations: [],
-        },
-        {
-          role: 'CMO' as const,
-          analysis: 'Analysis',
-          keyInsights: ['Same insight'],
-          recommendations: [],
-        },
-      ];
-
-      const insights = extractInsights(analyses);
-
-      const sameInsightCount = insights.filter(i => i === 'Same insight').length;
-      expect(sameInsightCount).toBe(1);
-    });
-
-    it('should handle empty insights arrays', () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: [],
-        },
-      ];
-
-      const insights = extractInsights(analyses);
-
-      expect(Array.isArray(insights)).toBe(true);
-      expect(insights.length).toBe(0);
-    });
+    await expect(synthesize(analyses, mockEnv)).rejects.toThrow();
   });
 
-  describe('prioritizeActionItems', () => {
-    it('should rank items by frequency across roles', () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Action A', 'Action B'],
-        },
-        {
-          role: 'CMO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Action A', 'Action C'],
-        },
-        {
-          role: 'COO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Action A'],
-        },
-      ];
-
-      const actionItems = prioritizeActionItems(analyses);
-
-      // Action A mentioned by all should be first
-      expect(actionItems[0]).toBe('Action A');
-    });
-
-    it('should preserve unique recommendations', () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Unique CFO action'],
-        },
-        {
-          role: 'CMO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: ['Unique CMO action'],
-        },
-      ];
-
-      const actionItems = prioritizeActionItems(analyses);
-
-      expect(actionItems).toContain('Unique CFO action');
-      expect(actionItems).toContain('Unique CMO action');
-    });
-
-    it('should handle empty recommendations', () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Analysis',
-          keyInsights: [],
-          recommendations: [],
-        },
-      ];
-
-      const actionItems = prioritizeActionItems(analyses);
-
-      expect(Array.isArray(actionItems)).toBe(true);
-      expect(actionItems.length).toBe(0);
-    });
-  });
-
-  describe('formatAnalysisForReport', () => {
-    it('should format analysis with all fields', () => {
-      const analysis = {
+  it('should log synthesis steps', async () => {
+    const analyses = [
+      {
         role: 'CFO' as const,
-        analysis: 'Detailed financial analysis',
-        keyInsights: ['Insight 1', 'Insight 2'],
-        recommendations: ['Rec 1', 'Rec 2'],
-      };
+        analysis: 'Analysis',
+        keyInsights: ['insight'],
+        recommendations: ['rec'],
+      },
+    ];
 
-      const formatted = formatAnalysisForReport(analysis);
+    await synthesize(analyses, mockEnv);
 
-      expect(formatted).toContain('CFO');
-      expect(formatted).toContain('Detailed financial analysis');
-      expect(formatted).toContain('Insight 1');
-      expect(formatted).toContain('Rec 1');
-    });
-
-    it('should handle analyses with empty arrays', () => {
-      const analysis = {
-        role: 'CMO' as const,
-        analysis: 'Brief analysis',
-        keyInsights: [],
-        recommendations: [],
-      };
-
-      const formatted = formatAnalysisForReport(analysis);
-
-      expect(formatted).toContain('CMO');
-      expect(formatted).toContain('Brief analysis');
-    });
-
-    it('should return markdown formatted string', () => {
-      const analysis = {
-        role: 'COO' as const,
-        analysis: 'Operations analysis',
-        keyInsights: ['Insight'],
-        recommendations: ['Recommendation'],
-      };
-
-      const formatted = formatAnalysisForReport(analysis);
-
-      // Should contain markdown formatting
-      expect(formatted).toMatch(/#{1,3}/); // Headers
-    });
+    expect(mockEnv.logger.info).toHaveBeenCalled();
   });
+});
+
+
+
+describe('formatAnalysisForReport', () => {
+  it('should format analysis with all fields', () => {
+    const analysis = {
+      role: 'CFO' as const,
+      analysis: 'Detailed financial analysis',
+      keyInsights: ['Insight 1', 'Insight 2'],
+      recommendations: ['Rec 1', 'Rec 2'],
+    };
+
+    const formatted = formatAnalysisForReport(analysis);
+
+    expect(formatted).toContain('CFO');
+    expect(formatted).toContain('Detailed financial analysis');
+    expect(formatted).toContain('Insight 1');
+    expect(formatted).toContain('Rec 1');
+  });
+
+  it('should handle analyses with empty arrays', () => {
+    const analysis = {
+      role: 'CMO' as const,
+      analysis: 'Brief analysis',
+      keyInsights: [],
+      recommendations: [],
+    };
+
+    const formatted = formatAnalysisForReport(analysis);
+
+    expect(formatted).toContain('CMO');
+    expect(formatted).toContain('Brief analysis');
+  });
+
+  it('should return markdown formatted string', () => {
+    const analysis = {
+      role: 'COO' as const,
+      analysis: 'Operations analysis',
+      keyInsights: ['Insight'],
+      recommendations: ['Recommendation'],
+    };
+
+    const formatted = formatAnalysisForReport(analysis);
+
+    // Should contain markdown formatting
+    expect(formatted).toMatch(/#{1,3}/); // Headers
+  });
+});
 });

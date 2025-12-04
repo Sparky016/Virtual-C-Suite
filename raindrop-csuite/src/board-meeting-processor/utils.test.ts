@@ -3,11 +3,36 @@ import {
   extractRequestIdFromKey,
   fetchFileContent,
   runParallelAnalyses,
-  updateAnalysisStatus,
+  extractRequestIdFromKey,
+  fetchFileContent,
+  runParallelAnalyses,
   saveReportToOutputBucket,
-  saveExecutiveAnalyses,
   saveFinalReport,
 } from './utils';
+import SambaNova from 'sambanova';
+
+// Mock SambaNova
+vi.mock('sambanova', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  analysis: 'Analysis',
+                  keyInsights: ['Insight'],
+                  recommendations: ['Rec']
+                })
+              }
+            }]
+          })
+        }
+      }
+    }))
+  };
+});
 
 describe('board-meeting-processor utils', () => {
   let mockEnv: any;
@@ -22,18 +47,11 @@ describe('board-meeting-processor utils', () => {
       OUTPUT_BUCKET: {
         put: vi.fn().mockResolvedValue(undefined),
       },
-      ANALYSIS_DB: {
-        execute: vi.fn().mockResolvedValue({ results: [] }),
-      },
       ANALYSIS_COORDINATOR: {
         buildPrompt: vi.fn().mockReturnValue('Prompt'),
         synthesize: vi.fn(),
       },
-      AI: {
-        run: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Analysis' } }],
-        }),
-      },
+      SAMBANOVA_API_KEY: 'test-key',
       logger: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -114,25 +132,15 @@ describe('board-meeting-processor utils', () => {
       expect(mockEnv.ANALYSIS_COORDINATOR.buildPrompt).toHaveBeenCalledWith(content, 'COO');
     });
 
-    it('should call AI service for each executive', async () => {
+    it('should call SambaNova service for each executive', async () => {
       const content = 'Board meeting transcript';
       await runParallelAnalyses(content, mockEnv);
 
-      expect(mockEnv.AI.run).toHaveBeenCalledTimes(3);
+      expect(SambaNova).toHaveBeenCalledTimes(3);
     });
 
     it('should parse AI responses into structured analyses', async () => {
-      mockEnv.AI.run = vi.fn().mockResolvedValue({
-        choices: [{
-          message: {
-            content: JSON.stringify({
-              analysis: 'Detailed analysis',
-              keyInsights: ['insight1', 'insight2'],
-              recommendations: ['rec1', 'rec2'],
-            }),
-          },
-        }],
-      });
+
 
       const content = 'Board meeting transcript';
       const analyses = await runParallelAnalyses(content, mockEnv);
@@ -143,7 +151,14 @@ describe('board-meeting-processor utils', () => {
     });
 
     it('should handle AI service errors', async () => {
-      mockEnv.AI.run = vi.fn().mockRejectedValue(new Error('AI error'));
+      // Mock error implementation
+      (SambaNova as any).mockImplementationOnce(() => ({
+        chat: {
+          completions: {
+            create: vi.fn().mockRejectedValue(new Error('AI error'))
+          }
+        }
+      }));
       const content = 'Board meeting transcript';
 
       await expect(runParallelAnalyses(content, mockEnv)).rejects.toThrow();
@@ -160,32 +175,7 @@ describe('board-meeting-processor utils', () => {
     });
   });
 
-  describe('updateAnalysisStatus', () => {
-    it('should update request status in database', async () => {
-      await updateAnalysisStatus('req-123', 'processing', mockEnv);
 
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE'),
-        expect.arrayContaining(['processing', 'req-123'])
-      );
-    });
-
-    it('should support all status values', async () => {
-      const statuses = ['pending', 'processing', 'completed', 'failed'];
-
-      for (const status of statuses) {
-        await updateAnalysisStatus('req-123', status, mockEnv);
-      }
-
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledTimes(statuses.length);
-    });
-
-    it('should log status updates', async () => {
-      await updateAnalysisStatus('req-123', 'completed', mockEnv);
-
-      expect(mockEnv.logger.debug).toHaveBeenCalled();
-    });
-  });
 
   describe('saveReportToOutputBucket', () => {
     it('should save synthesized report to output bucket', async () => {
@@ -216,7 +206,7 @@ describe('board-meeting-processor utils', () => {
 
       expect(mockEnv.OUTPUT_BUCKET.put).toHaveBeenCalledWith(
         expect.any(String),
-        expect.stringContaining('requestId')
+        expect.stringContaining('Request ID') // Markdown content check
       );
     });
 
@@ -232,7 +222,7 @@ describe('board-meeting-processor utils', () => {
       await saveReportToOutputBucket(report, mockEnv);
 
       expect(mockEnv.OUTPUT_BUCKET.put).toHaveBeenCalledWith(
-        expect.stringMatching(/^reports\/req-123/),
+        expect.stringMatching(/^reports\/req-123\.md/),
         expect.any(String)
       );
     });
@@ -252,54 +242,15 @@ describe('board-meeting-processor utils', () => {
     });
   });
 
-  describe('saveExecutiveAnalyses', () => {
-    it('should save all executive analyses to database', async () => {
-      const analyses = [
-        { role: 'CFO' as const, analysis: 'CFO analysis', keyInsights: [], recommendations: [] },
-        { role: 'CMO' as const, analysis: 'CMO analysis', keyInsights: [], recommendations: [] },
-        { role: 'COO' as const, analysis: 'COO analysis', keyInsights: [], recommendations: [] },
-      ];
 
-      await saveExecutiveAnalyses('req-123', analyses, mockEnv);
-
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledTimes(3);
-    });
-
-    it('should include all analysis fields in insert', async () => {
-      const analyses = [
-        {
-          role: 'CFO' as const,
-          analysis: 'Financial analysis',
-          keyInsights: ['insight1'],
-          recommendations: ['rec1'],
-        },
-      ];
-
-      await saveExecutiveAnalyses('req-123', analyses, mockEnv);
-
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT'),
-        expect.arrayContaining(['req-123', 'CFO', expect.any(String)])
-      );
-    });
-  });
 
   describe('saveFinalReport', () => {
-    it('should update request with final report URL', async () => {
-      await saveFinalReport('req-123', 'reports/req-123.json', mockEnv);
+    it('should log completion', async () => {
+      await saveFinalReport('req-123', 'reports/req-123.md', mockEnv);
 
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE'),
-        expect.arrayContaining(['reports/req-123.json', 'req-123'])
-      );
-    });
-
-    it('should set status to completed', async () => {
-      await saveFinalReport('req-123', 'reports/req-123.json', mockEnv);
-
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE'),
-        expect.arrayContaining(['completed'])
+      expect(mockEnv.logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Final report saved'),
+        expect.any(Object)
       );
     });
   });

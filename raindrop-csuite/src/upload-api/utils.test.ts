@@ -19,9 +19,7 @@ describe('upload-api utils', () => {
       OUTPUT_BUCKET: {
         get: vi.fn().mockResolvedValue(null),
       },
-      ANALYSIS_DB: {
-        execute: vi.fn().mockResolvedValue({ results: [] }),
-      },
+
       logger: {
         debug: vi.fn(),
         info: vi.fn(),
@@ -48,8 +46,8 @@ describe('upload-api utils', () => {
 
     it('should reject non-PDF files', async () => {
       const formData = new FormData();
-      const blob = new Blob(['test'], { type: 'text/plain' });
-      formData.append('file', blob, 'test.txt');
+      const blob = new Blob(['test'], { type: 'image/png' });
+      formData.append('file', blob, 'test.png');
 
       const req = new Request('http://localhost/upload', {
         method: 'POST',
@@ -59,6 +57,20 @@ describe('upload-api utils', () => {
       const result = await validateUploadRequest(req, mockEnv);
       expect(result.valid).toBe(false);
       expect(result.error).toContain('Invalid file format');
+    });
+
+    it('should accept CSV files', async () => {
+      const formData = new FormData();
+      const blob = new Blob(['test'], { type: 'text/csv' });
+      formData.append('file', blob, 'test.csv');
+
+      const req = new Request('http://localhost/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await validateUploadRequest(req, mockEnv);
+      expect(result.valid).toBe(true);
     });
 
     it('should reject requests with no file', async () => {
@@ -111,71 +123,59 @@ describe('upload-api utils', () => {
   });
 
   describe('createAnalysisRequest', () => {
-    it('should insert new analysis request record', async () => {
+    it('should log request creation', async () => {
       await createAnalysisRequest('req-123', 'test.pdf', mockEnv);
 
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT'),
-        expect.arrayContaining(['req-123', 'test.pdf'])
-      );
-    });
-
-    it('should set initial status to pending', async () => {
-      await createAnalysisRequest('req-123', 'test.pdf', mockEnv);
-
-      expect(mockEnv.ANALYSIS_DB.execute).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.arrayContaining([expect.stringContaining('pending')])
+      expect(mockEnv.logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Analysis request initiated'),
+        expect.any(Object)
       );
     });
   });
 
   describe('getRequestStatus', () => {
-    it('should return status for existing request', async () => {
-      mockEnv.ANALYSIS_DB.execute = vi.fn().mockResolvedValue({
-        results: [{ request_id: 'req-123', status: 'processing' }],
-      });
+    it('should return completed if report exists', async () => {
+      mockEnv.OUTPUT_BUCKET.head = vi.fn().mockResolvedValue(true);
 
       const status = await getRequestStatus('req-123', mockEnv);
 
-      expect(status.requestId).toBe('req-123');
+      expect(status.status).toBe('completed');
+    });
+
+    it('should return processing if input file exists', async () => {
+      mockEnv.OUTPUT_BUCKET.head = vi.fn().mockResolvedValue(null);
+      mockEnv.INPUT_BUCKET.list = vi.fn().mockResolvedValue({ objects: [{ key: 'file' }] });
+
+      const status = await getRequestStatus('req-123', mockEnv);
+
       expect(status.status).toBe('processing');
     });
 
-    it('should throw error for non-existent request', async () => {
-      mockEnv.ANALYSIS_DB.execute = vi.fn().mockResolvedValue({
-        results: [],
-      });
+    it('should throw error if neither exists', async () => {
+      mockEnv.OUTPUT_BUCKET.head = vi.fn().mockResolvedValue(null);
+      mockEnv.INPUT_BUCKET.list = vi.fn().mockResolvedValue({ objects: [] });
 
       await expect(getRequestStatus('invalid', mockEnv)).rejects.toThrow();
     });
   });
 
   describe('getReport', () => {
-    it('should return report for completed analysis', async () => {
-      mockEnv.ANALYSIS_DB.execute = vi.fn().mockResolvedValue({
-        results: [{
-          request_id: 'req-123',
-          status: 'completed',
-          report_url: 'reports/req-123.json'
-        }],
-      });
-
+    it('should return report if it exists', async () => {
       mockEnv.OUTPUT_BUCKET.get = vi.fn().mockResolvedValue({
-        text: () => Promise.resolve('{"analysis": "data"}'),
+        text: () => Promise.resolve('# Report'),
       });
 
       const report = await getReport('req-123', mockEnv);
 
-      expect(report.requestId).toBe('req-123');
       expect(report.status).toBe('completed');
-      expect(report.report).toBeDefined();
+      expect(report.report).toBe('# Report');
     });
 
-    it('should return pending status when not complete', async () => {
-      mockEnv.ANALYSIS_DB.execute = vi.fn().mockResolvedValue({
-        results: [{ request_id: 'req-123', status: 'processing' }],
-      });
+    it('should return status if report missing', async () => {
+      mockEnv.OUTPUT_BUCKET.get = vi.fn().mockResolvedValue(null);
+      // Mock getRequestStatus behavior (processing)
+      mockEnv.OUTPUT_BUCKET.head = vi.fn().mockResolvedValue(null);
+      mockEnv.INPUT_BUCKET.list = vi.fn().mockResolvedValue({ objects: [{ key: 'file' }] });
 
       const report = await getReport('req-123', mockEnv);
 

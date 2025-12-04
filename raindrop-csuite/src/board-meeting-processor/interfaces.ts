@@ -24,9 +24,8 @@ export interface SynthesizedReport {
 export interface Env {
   INPUT_BUCKET: any;
   OUTPUT_BUCKET: any;
-  ANALYSIS_DB: any;
   ANALYSIS_COORDINATOR: any;
-  AI: any;
+  SAMBANOVA_API_KEY: string;
   logger: Logger;
 }
 

@@ -6,6 +6,24 @@ import { corsAllowAll } from '@liquidmetal-ai/raindrop-framework/core/cors';
  * This handler is automatically applied to all HTTP services in your application.
  * You can override this per-handler by exporting a `cors` function from your handler.
  *
+ * **CURRENT CONFIGURATION: Demo/Development Mode**
+ * corsAllowAll is ENABLED for hackathon demo to allow access from:
+ * - localhost development (http://localhost:3000, etc.)
+ * - Your deployed frontend (Vercel, Netlify, etc.)
+ * - Testing tools (Postman, curl, etc.)
+ *
+ * **For Production:** Restrict to specific origins once you have your frontend URL:
+ * import { createCorsHandler } from '@liquidmetal-ai/raindrop-framework/core/cors';
+ * export const cors = createCorsHandler({
+ *   origin: [
+ *     'https://your-frontend.vercel.app',
+ *     'http://localhost:3000'  // Keep for local dev
+ *   ],
+ *   allowMethods: ['GET', 'POST', 'OPTIONS'],
+ *   allowHeaders: ['Content-Type'],
+ *   credentials: false
+ * });
+ *
  * **Default Behavior (Insecure):**
  * By default, CORS is open for development but not recommended for production.
  *

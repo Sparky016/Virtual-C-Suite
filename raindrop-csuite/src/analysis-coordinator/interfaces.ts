@@ -19,7 +19,7 @@ export interface PromptTemplate {
 }
 
 export interface Env {
-  AI: any;
+  SAMBANOVA_API_KEY: string;
   logger: Logger;
 }
 
