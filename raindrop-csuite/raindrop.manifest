@@ -23,6 +23,5 @@ application "virtual-c-suite" {
     visibility = "private"
   }
 
-  sql_database "tracking-db" {
-  }
+
 }

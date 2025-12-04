@@ -11,6 +11,9 @@ out/
 .env.local
 .env.*.local
 
+# MCP configuration (contains API tokens)
+.mcp.json
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

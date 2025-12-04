@@ -123,6 +123,31 @@ app.get('/status/:requestId', async (c) => {
       }, 404);
     }
 
+    // Check for timeout on processing requests
+    const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+    const elapsed = now - (result.created_at as number);
+
+    if (result.status === 'processing' && elapsed > TIMEOUT_MS) {
+      console.warn(`Request ${requestId} timed out after ${elapsed}ms`);
+
+      // Mark as failed due to timeout
+      await c.env.TRACKING_DB.prepare(
+        `UPDATE analysis_requests
+         SET status = ?, error_message = ?, completed_at = ?
+         WHERE request_id = ?`
+      ).bind('failed', 'Processing timeout exceeded (5 minutes)', now, requestId).run();
+
+      return c.json({
+        requestId,
+        status: 'failed',
+        error: 'Processing timeout exceeded',
+        message: 'Analysis took longer than expected. Please try again.',
+        createdAt: new Date(result.created_at as number).toISOString(),
+        completedAt: new Date(now).toISOString()
+      });
+    }
+
     // Get progress from executive analyses
     const analyses = await c.env.TRACKING_DB.prepare(
       `SELECT executive_role, analysis_text
