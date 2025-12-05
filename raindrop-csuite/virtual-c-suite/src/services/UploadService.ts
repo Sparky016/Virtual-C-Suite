@@ -1,7 +1,7 @@
 // Upload Service - Business logic for file uploads
 import { BucketPutOptions } from '@liquidmetal-ai/raindrop-framework';
 import { FileValidationService } from './FileValidationService';
-import { trackEvent, AnalyticsEvents } from '../shared/analytics';
+import { LoggerService } from './LoggerService';
 
 export interface UploadRequest {
   file: File;
@@ -19,9 +19,11 @@ export interface UploadResult {
 
 export class UploadService {
   private validationService: FileValidationService;
+  private logger: LoggerService;
 
-  constructor() {
+  constructor(logger: LoggerService) {
     this.validationService = new FileValidationService();
+    this.logger = logger;
   }
 
   /**
@@ -93,7 +95,6 @@ export class UploadService {
    * Track successful upload
    */
   trackUploadSuccess(
-    posthogKey: string | undefined,
     userId: string,
     requestId: string,
     file: File,
@@ -101,44 +102,40 @@ export class UploadService {
   ): void {
     const fileSizeMB = this.validationService.getFileSizeMB(file);
 
-    trackEvent(posthogKey, userId, AnalyticsEvents.FILE_UPLOADED, {
-      request_id: requestId,
-      file_name: file.name,
-      file_type: file.type,
-      file_size_mb: fileSizeMB.toFixed(2),
-      file_key: fileKey
-    });
+    this.logger.trackFileUploaded(
+      userId,
+      requestId,
+      file.name,
+      file.type,
+      fileSizeMB.toFixed(2),
+      fileKey
+    );
   }
 
   /**
    * Track validation success
    */
-  trackValidationSuccess(
-    posthogKey: string | undefined,
-    userId: string,
-    file: File
-  ): void {
+  trackValidationSuccess(userId: string, file: File): void {
     const fileSizeMB = this.validationService.getFileSizeMB(file);
 
-    trackEvent(posthogKey, userId, AnalyticsEvents.FILE_VALIDATED, {
-      file_name: file.name,
-      file_type: file.type,
-      file_size_mb: fileSizeMB.toFixed(2)
-    });
+    this.logger.trackFileValidated(
+      userId,
+      file.name,
+      file.type,
+      fileSizeMB.toFixed(2)
+    );
   }
 
   /**
    * Track validation failure
    */
   trackValidationFailure(
-    posthogKey: string | undefined,
     userId: string,
     file: File,
     reason: string,
     details: any
   ): void {
-    trackEvent(posthogKey, userId, AnalyticsEvents.FILE_VALIDATION_FAILED, {
-      reason,
+    this.logger.trackFileValidationFailed(userId, reason, {
       file_name: file.name,
       file_type: file.type,
       ...details
