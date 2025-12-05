@@ -7,7 +7,15 @@ import { MAX_FILE_SIZE_MB, ALLOWED_FILE_TYPES, ALLOWED_EXTENSIONS } from '../sha
 import { RateLimiter, getRateLimitHeaders } from '../shared/rate-limiter';
 
 // Create Hono app with middleware
-const app = new Hono<{ Bindings: Env }>();
+// Create Hono app with middleware
+interface AppBindings extends Env {
+  ALLOWED_ORIGINS?: string;
+  JWT_ISSUER?: string;
+  JWT_AUDIENCE?: string;
+  RATE_LIMIT_PER_USER?: string;
+}
+
+const app = new Hono<{ Bindings: AppBindings }>();
 
 // Add request logging middleware
 app.use('*', logger());
@@ -50,7 +58,9 @@ app.post('/upload', async (c) => {
     }
 
     // Check rate limit
-    const rateLimitResult = await rateLimiter.checkLimit(c.env.TRACKING_DB, userId);
+    // Check rate limit
+    const maxRequests = c.env.RATE_LIMIT_PER_USER ? parseInt(c.env.RATE_LIMIT_PER_USER) : undefined;
+    const rateLimitResult = await rateLimiter.checkLimit(c.env.TRACKING_DB, userId, maxRequests);
     const rateLimitHeaders = getRateLimitHeaders(rateLimitResult);
 
     if (!rateLimitResult.allowed) {

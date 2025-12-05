@@ -32,9 +32,11 @@ export class RateLimiter {
    * Check if a user has exceeded their rate limit
    * @param db Database connection
    * @param userId User identifier
+   * @param maxRequestsOverride Optional override for max requests (e.g. from env)
    * @returns Rate limit result with allowed status
    */
-  async checkLimit(db: any, userId: string): Promise<RateLimitResult> {
+  async checkLimit(db: any, userId: string, maxRequestsOverride?: number): Promise<RateLimitResult> {
+    const maxRequests = maxRequestsOverride || this.config.maxRequests;
     const now = Date.now();
     const windowStart = now - this.config.windowMs;
 
