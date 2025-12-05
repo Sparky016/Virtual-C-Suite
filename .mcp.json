@@ -2,9 +2,23 @@
   "mcpServers": {
     "netlify": {
       "command": "npx",
-      "args": ["-y", "@netlify/mcp"],
+      "args": [
+        "-y",
+        "@netlify/mcp"
+      ],
       "env": {
         "NETLIFY_AUTH_TOKEN": "nfp_i16KGvM2Fi2bqcRJFzRY7iJkWkxPdrT854b1"
+      }
+    },
+    "posthog": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@posthog/mcp-server"
+      ],
+      "env": {
+        "POSTHOG_API_KEY": "phx_N7dVjPUzVqJzknHH7djToX7RmcNqYizh1c8SFTJE4aoUObc",
+        "POSTHOG_HOST": "https://app.posthog.com"
       }
     }
   }

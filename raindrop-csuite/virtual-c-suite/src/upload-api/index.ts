@@ -5,6 +5,7 @@ import { BucketPutOptions } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { MAX_FILE_SIZE_MB, ALLOWED_FILE_TYPES, ALLOWED_EXTENSIONS } from '../shared/types';
 import { RateLimiter, getRateLimitHeaders } from '../shared/rate-limiter';
+import { trackEvent, AnalyticsEvents } from '../shared/analytics';
 
 // Create Hono app with middleware
 // Create Hono app with middleware
@@ -13,6 +14,7 @@ interface AppBindings extends Env {
   JWT_ISSUER?: string;
   JWT_AUDIENCE?: string;
   RATE_LIMIT_PER_USER?: string;
+  POSTHOG_API_KEY?: string;
 }
 
 const app = new Hono<{ Bindings: AppBindings }>();
@@ -58,13 +60,26 @@ app.post('/upload', async (c) => {
     }
 
     // Check rate limit
-    // Check rate limit
     const maxRequests = c.env.RATE_LIMIT_PER_USER ? parseInt(c.env.RATE_LIMIT_PER_USER) : undefined;
     const rateLimitResult = await rateLimiter.checkLimit(c.env.TRACKING_DB, userId, maxRequests);
     const rateLimitHeaders = getRateLimitHeaders(rateLimitResult);
 
+    // Track rate limit check
+    trackEvent(c.env.POSTHOG_API_KEY, userId, AnalyticsEvents.RATE_LIMIT_CHECKED, {
+      allowed: rateLimitResult.allowed,
+      remaining: rateLimitResult.remaining
+    });
+
     if (!rateLimitResult.allowed) {
       console.warn(`Rate limit exceeded for user: ${userId}`);
+
+      // Track rate limit exceeded
+      trackEvent(c.env.POSTHOG_API_KEY, userId, AnalyticsEvents.RATE_LIMIT_EXCEEDED, {
+        message: rateLimitResult.message,
+        remaining: rateLimitResult.remaining,
+        resetAt: new Date(rateLimitResult.resetAt).toISOString()
+      });
+
       return c.json({
         error: 'Rate limit exceeded',
         message: rateLimitResult.message,
@@ -76,6 +91,12 @@ app.post('/upload', async (c) => {
     // Validate file size
     const fileSizeMB = file.size / (1024 * 1024);
     if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      trackEvent(c.env.POSTHOG_API_KEY, userId, AnalyticsEvents.FILE_VALIDATION_FAILED, {
+        reason: 'file_size_exceeded',
+        size_mb: fileSizeMB.toFixed(2),
+        limit_mb: MAX_FILE_SIZE_MB
+      });
+
       return c.json({
         error: `File size exceeds ${MAX_FILE_SIZE_MB}MB limit`,
         size: `${fileSizeMB.toFixed(2)}MB`
@@ -84,11 +105,24 @@ app.post('/upload', async (c) => {
 
     // Validate file type
     if (!validateFileType(file.name, file.type)) {
+      trackEvent(c.env.POSTHOG_API_KEY, userId, AnalyticsEvents.FILE_VALIDATION_FAILED, {
+        reason: 'invalid_file_type',
+        file_type: file.type,
+        file_name: file.name
+      });
+
       return c.json({
         error: 'Invalid file type. Only CSV, PDF, and TXT files are supported.',
         received: file.type
       }, 400);
     }
+
+    // Track successful validation
+    trackEvent(c.env.POSTHOG_API_KEY, userId, AnalyticsEvents.FILE_VALIDATED, {
+      file_name: file.name,
+      file_type: file.type,
+      file_size_mb: fileSizeMB.toFixed(2)
+    });
 
     // Generate request ID
     const requestId = generateRequestId();
@@ -117,6 +151,15 @@ app.post('/upload', async (c) => {
        VALUES (?, ?, ?, ?, ?)`
     ).bind(requestId, userId, fileKey, 'processing', createdAt).run();
 
+    // Track successful file upload
+    trackEvent(c.env.POSTHOG_API_KEY, userId, AnalyticsEvents.FILE_UPLOADED, {
+      request_id: requestId,
+      file_name: file.name,
+      file_type: file.type,
+      file_size_mb: fileSizeMB.toFixed(2),
+      file_key: fileKey
+    });
+
     // Return success with rate limit headers
     return c.json({
       requestId,
@@ -130,6 +173,21 @@ app.post('/upload', async (c) => {
 
   } catch (error) {
     console.error('Upload error:', error);
+
+    // Track upload failure
+    const userId = 'unknown'; // Try to get userId from formData if available
+    try {
+      const formData = await c.req.formData();
+      const userIdFromForm = formData.get('userId') as string;
+      if (userIdFromForm) {
+        trackEvent(c.env.POSTHOG_API_KEY, userIdFromForm, AnalyticsEvents.FILE_UPLOAD_FAILED, {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    } catch {
+      // Ignore error in error handler
+    }
+
     return c.json({
       error: 'Failed to upload file',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -194,6 +252,13 @@ app.get('/status/:requestId', async (c) => {
       coo: analyses.results.some((a: any) => a.executive_role === 'COO') ? 'completed' : 'pending',
       synthesis: result.status === 'completed' ? 'completed' : 'pending'
     };
+
+    // Track status check
+    trackEvent(c.env.POSTHOG_API_KEY, 'system', AnalyticsEvents.STATUS_CHECKED, {
+      request_id: requestId,
+      status: result.status,
+      progress
+    });
 
     return c.json({
       requestId,
@@ -261,6 +326,12 @@ app.get('/reports/:requestId', async (c) => {
         requestId
       }, 404);
     }
+
+    // Track report retrieval
+    trackEvent(c.env.POSTHOG_API_KEY, 'system', AnalyticsEvents.REPORT_RETRIEVED, {
+      request_id: requestId,
+      completed_at: new Date(report.created_at as number).toISOString()
+    });
 
     return c.json({
       requestId,

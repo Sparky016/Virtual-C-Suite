@@ -6,6 +6,11 @@ import {
 import { Env } from './raindrop.gen';
 import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt, formatFinalReport } from '../shared/prompts';
 import { retryAICall, RetryResult } from '../shared/retry-logic';
+import { trackEvent, trackAIPerformance, AnalyticsEvents } from '../shared/analytics';
+
+interface ProcessorEnv extends Env {
+  POSTHOG_API_KEY?: string;
+}
 
 export default class extends Each<BucketEventNotification, Env> {
   async process(message: Message<BucketEventNotification>): Promise<void> {
@@ -47,6 +52,13 @@ export default class extends Each<BucketEventNotification, Env> {
       }
 
       console.log(`Starting analysis for request: ${requestId}`);
+
+      // Track analysis started
+      const userId = file.customMetadata?.userId as string || 'unknown';
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_STARTED, {
+        request_id: requestId,
+        file_key: event.object.key
+      });
 
       // Read file content
       const fileContent = await file.text();
@@ -119,6 +131,16 @@ export default class extends Each<BucketEventNotification, Env> {
       const cmoAnalysis = cmoRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
       const cooAnalysis = cooRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
 
+      // Track AI performance for each executive
+      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'CFO', cfoRetryResult.totalDuration, cfoRetryResult.attempts, cfoRetryResult.success, { request_id: requestId });
+      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'CMO', cmoRetryResult.totalDuration, cmoRetryResult.attempts, cmoRetryResult.success, { request_id: requestId });
+      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'COO', cooRetryResult.totalDuration, cooRetryResult.attempts, cooRetryResult.success, { request_id: requestId });
+
+      // Track individual executive analyses completed
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.CFO_ANALYSIS_COMPLETED, { request_id: requestId, duration_ms: cfoRetryResult.totalDuration });
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.CMO_ANALYSIS_COMPLETED, { request_id: requestId, duration_ms: cmoRetryResult.totalDuration });
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.COO_ANALYSIS_COMPLETED, { request_id: requestId, duration_ms: cooRetryResult.totalDuration });
+
       // Store individual executive analyses in database
       const createdAt = Date.now();
       await Promise.all([
@@ -165,6 +187,10 @@ export default class extends Each<BucketEventNotification, Env> {
 
       const ceoSynthesis = ceoRetryResult.data?.choices[0]?.message?.content || 'Synthesis unavailable';
 
+      // Track CEO synthesis performance
+      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'CEO', ceoRetryResult.totalDuration, ceoRetryResult.attempts, ceoRetryResult.success, { request_id: requestId });
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.CEO_SYNTHESIS_COMPLETED, { request_id: requestId, duration_ms: ceoRetryResult.totalDuration });
+
       // Generate final report
       const finalReport = formatFinalReport(
         requestId,
@@ -196,12 +222,35 @@ export default class extends Each<BucketEventNotification, Env> {
       const totalDuration = Date.now() - startTime;
       console.log(`Total processing completed in ${totalDuration}ms for request ${requestId}`);
 
+      // Track report generation and analysis completion
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.REPORT_GENERATED, {
+        request_id: requestId,
+        total_duration_ms: totalDuration,
+        ai_duration_ms: aiDuration,
+        synthesis_duration_ms: synthesisDuration
+      });
+
+      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_COMPLETED, {
+        request_id: requestId,
+        total_duration_ms: totalDuration,
+        total_duration_seconds: (totalDuration / 1000).toFixed(2)
+      });
+
     } catch (error) {
       console.error('Error processing file:', error);
 
       // Update request status to failed
       if (requestId) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const userId = (await this.env.INPUT_BUCKET.get(event.object.key))?.customMetadata?.userId as string || 'unknown';
+
+        // Track analysis failure
+        trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_FAILED, {
+          request_id: requestId,
+          error: errorMessage,
+          duration_ms: Date.now() - startTime
+        });
+
         await this.env.TRACKING_DB.prepare(
           `UPDATE analysis_requests
            SET status = ?, error_message = ?
