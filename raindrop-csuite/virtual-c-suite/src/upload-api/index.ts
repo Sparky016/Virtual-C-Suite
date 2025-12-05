@@ -4,12 +4,16 @@ import { logger } from 'hono/logger';
 import { BucketPutOptions } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { MAX_FILE_SIZE_MB, ALLOWED_FILE_TYPES, ALLOWED_EXTENSIONS } from '../shared/types';
+import { RateLimiter, getRateLimitHeaders } from '../shared/rate-limiter';
 
 // Create Hono app with middleware
 const app = new Hono<{ Bindings: Env }>();
 
 // Add request logging middleware
 app.use('*', logger());
+
+// Initialize rate limiter (10 requests per 15 minutes per user)
+const rateLimiter = new RateLimiter();
 
 // Health check endpoint
 app.get('/health', (c) => {
@@ -43,6 +47,20 @@ app.post('/upload', async (c) => {
 
     if (!userId) {
       return c.json({ error: 'userId is required' }, 400);
+    }
+
+    // Check rate limit
+    const rateLimitResult = await rateLimiter.checkLimit(c.env.TRACKING_DB, userId);
+    const rateLimitHeaders = getRateLimitHeaders(rateLimitResult);
+
+    if (!rateLimitResult.allowed) {
+      console.warn(`Rate limit exceeded for user: ${userId}`);
+      return c.json({
+        error: 'Rate limit exceeded',
+        message: rateLimitResult.message,
+        remaining: rateLimitResult.remaining,
+        resetAt: new Date(rateLimitResult.resetAt).toISOString()
+      }, 429, rateLimitHeaders);
     }
 
     // Validate file size
@@ -89,11 +107,16 @@ app.post('/upload', async (c) => {
        VALUES (?, ?, ?, ?, ?)`
     ).bind(requestId, userId, fileKey, 'processing', createdAt).run();
 
+    // Return success with rate limit headers
     return c.json({
       requestId,
       status: 'processing',
-      message: 'File uploaded successfully. Analysis in progress.'
-    }, 201);
+      message: 'File uploaded successfully. Analysis in progress.',
+      rateLimit: {
+        remaining: rateLimitResult.remaining - 1, // Subtract the current request
+        resetAt: new Date(rateLimitResult.resetAt).toISOString()
+      }
+    }, 201, rateLimitHeaders);
 
   } catch (error) {
     console.error('Upload error:', error);

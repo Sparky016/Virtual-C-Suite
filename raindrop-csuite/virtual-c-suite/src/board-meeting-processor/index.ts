@@ -5,6 +5,7 @@ import {
 } from "@liquidmetal-ai/raindrop-framework";
 import { Env } from './raindrop.gen';
 import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt, formatFinalReport } from '../shared/prompts';
+import { retryAICall, RetryResult } from '../shared/retry-logic';
 
 export default class extends Each<BucketEventNotification, Env> {
   async process(message: Message<BucketEventNotification>): Promise<void> {
@@ -51,43 +52,72 @@ export default class extends Each<BucketEventNotification, Env> {
       const fileContent = await file.text();
       console.log(`File content length: ${fileContent.length} characters`);
 
-      // SCATTER: Parallel AI analysis from three expert perspectives
-      console.log('Starting parallel AI analysis...');
+      // SCATTER: Parallel AI analysis from three expert perspectives with retry logic
+      console.log('Starting parallel AI analysis with retry support...');
       const aiStartTime = Date.now();
 
-      const [cfoResult, cmoResult, cooResult] = await Promise.all([
-        // CFO Analysis
-        this.env.AI.run('llama-3.3-70b', {
-          model: 'llama-3.3-70b',
-          messages: [{ role: 'user', content: getCFOPrompt(fileContent) }],
-          temperature: 0.7,
-          max_tokens: 800
-        }),
+      const [cfoRetryResult, cmoRetryResult, cooRetryResult] = await Promise.all([
+        // CFO Analysis with retry
+        retryAICall(
+          this.env.AI,
+          'llama-3.3-70b',
+          {
+            model: 'llama-3.3-70b',
+            messages: [{ role: 'user', content: getCFOPrompt(fileContent) }],
+            temperature: 0.7,
+            max_tokens: 800
+          },
+          undefined, // Use default retry config
+          'CFO Analysis'
+        ),
 
-        // CMO Analysis
-        this.env.AI.run('llama-3.3-70b', {
-          model: 'llama-3.3-70b',
-          messages: [{ role: 'user', content: getCMOPrompt(fileContent) }],
-          temperature: 0.7,
-          max_tokens: 800
-        }),
+        // CMO Analysis with retry
+        retryAICall(
+          this.env.AI,
+          'llama-3.3-70b',
+          {
+            model: 'llama-3.3-70b',
+            messages: [{ role: 'user', content: getCMOPrompt(fileContent) }],
+            temperature: 0.7,
+            max_tokens: 800
+          },
+          undefined,
+          'CMO Analysis'
+        ),
 
-        // COO Analysis
-        this.env.AI.run('llama-3.3-70b', {
-          model: 'llama-3.3-70b',
-          messages: [{ role: 'user', content: getCOOPrompt(fileContent) }],
-          temperature: 0.7,
-          max_tokens: 800
-        })
+        // COO Analysis with retry
+        retryAICall(
+          this.env.AI,
+          'llama-3.3-70b',
+          {
+            model: 'llama-3.3-70b',
+            messages: [{ role: 'user', content: getCOOPrompt(fileContent) }],
+            temperature: 0.7,
+            max_tokens: 800
+          },
+          undefined,
+          'COO Analysis'
+        )
       ]);
 
       const aiDuration = Date.now() - aiStartTime;
-      console.log(`Parallel AI analysis completed in ${aiDuration}ms`);
+      console.log(`Parallel AI analysis completed in ${aiDuration}ms (CFO: ${cfoRetryResult.attempts} attempts, CMO: ${cmoRetryResult.attempts} attempts, COO: ${cooRetryResult.attempts} attempts)`);
 
-      // Extract analysis text
-      const cfoAnalysis = cfoResult.choices[0]?.message?.content || 'Analysis unavailable';
-      const cmoAnalysis = cmoResult.choices[0]?.message?.content || 'Analysis unavailable';
-      const cooAnalysis = cooResult.choices[0]?.message?.content || 'Analysis unavailable';
+      // Check if any AI call failed after retries
+      if (!cfoRetryResult.success || !cmoRetryResult.success || !cooRetryResult.success) {
+        const failedRoles = [
+          !cfoRetryResult.success ? 'CFO' : null,
+          !cmoRetryResult.success ? 'CMO' : null,
+          !cooRetryResult.success ? 'COO' : null
+        ].filter(Boolean);
+
+        throw new Error(`AI analysis failed for: ${failedRoles.join(', ')}. Errors: ${[cfoRetryResult.error?.message, cmoRetryResult.error?.message, cooRetryResult.error?.message].filter(Boolean).join('; ')}`);
+      }
+
+      // Extract analysis text from successful results
+      const cfoAnalysis = cfoRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
+      const cmoAnalysis = cmoRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
+      const cooAnalysis = cooRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
 
       // Store individual executive analyses in database
       const createdAt = Date.now();
@@ -108,21 +138,32 @@ export default class extends Each<BucketEventNotification, Env> {
         ).bind(requestId, 'COO', cooAnalysis, createdAt).run()
       ]);
 
-      // GATHER: CEO Synthesis
-      console.log('Starting CEO synthesis...');
+      // GATHER: CEO Synthesis with retry logic
+      console.log('Starting CEO synthesis with retry support...');
       const synthesisStartTime = Date.now();
 
-      const ceoResult = await this.env.AI.run('llama-3.3-70b', {
-        model: 'llama-3.3-70b',
-        messages: [{ role: 'user', content: getCEOSynthesisPrompt(cfoAnalysis, cmoAnalysis, cooAnalysis) }],
-        temperature: 0.8,
-        max_tokens: 1000
-      });
+      const ceoRetryResult = await retryAICall(
+        this.env.AI,
+        'llama-3.3-70b',
+        {
+          model: 'llama-3.3-70b',
+          messages: [{ role: 'user', content: getCEOSynthesisPrompt(cfoAnalysis, cmoAnalysis, cooAnalysis) }],
+          temperature: 0.8,
+          max_tokens: 1000
+        },
+        undefined,
+        'CEO Synthesis'
+      );
 
       const synthesisDuration = Date.now() - synthesisStartTime;
-      console.log(`CEO synthesis completed in ${synthesisDuration}ms`);
+      console.log(`CEO synthesis completed in ${synthesisDuration}ms (${ceoRetryResult.attempts} attempts)`);
 
-      const ceoSynthesis = ceoResult.choices[0]?.message?.content || 'Synthesis unavailable';
+      // Check if CEO synthesis failed after retries
+      if (!ceoRetryResult.success) {
+        throw new Error(`CEO synthesis failed after ${ceoRetryResult.attempts} attempts: ${ceoRetryResult.error?.message}`);
+      }
+
+      const ceoSynthesis = ceoRetryResult.data?.choices[0]?.message?.content || 'Synthesis unavailable';
 
       // Generate final report
       const finalReport = formatFinalReport(
