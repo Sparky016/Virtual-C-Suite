@@ -46,15 +46,13 @@ The Virtual C-Suite provides a comprehensive dashboard and executive team interf
 
 ```
 raindrop-csuite/
-├── src/
-│   ├── index.js              # Main entry point
-│   └── components/
-│       ├── Dashboard.js      # Dashboard component
-│       └── ExecutiveTeam.js  # Executive team component
-├── styles/
-│   └── main.css             # Application styles
-├── package.json             # Project configuration
-├── raindrop.config.js       # Raindrop configuration
+├── virtual-c-suite/         # Main application directory
+│   ├── src/                 # Source code
+│   ├── db/                  # Database schemas and migrations
+│   ├── package.json         # Application dependencies
+│   ├── tsconfig.json        # TypeScript configuration
+│   └── raindrop.manifest    # Raindrop deployment manifest
+├── package.json             # Root package configuration
 └── README.md               # This file
 ```
 
@@ -83,25 +81,74 @@ Each executive provides consultation services and detailed profiles.
 
 ### Building
 
-To build the application for production:
-```bash
-npm run build
-```
+To build the TypeScript application:
+
+1. Navigate to the virtual-c-suite directory:
+   ```bash
+   cd virtual-c-suite
+   ```
+
+2. Run the build command:
+   ```bash
+   npm run build
+   ```
+
+This will remove the `dist` directory and compile all TypeScript files.
 
 ### Deployment
 
-To deploy to Raindrop:
+To deploy to Raindrop (run from repository root):
+
+1. Make sure you're authenticated:
+   ```bash
+   raindrop auth login
+   ```
+
+2. Deploy and start the application:
+   ```bash
+   raindrop build deploy --start
+   ```
+
+This command will:
+- Validate the manifest
+- Build the TypeScript code
+- Upload the application to Raindrop
+- Start all services and observers (upload-api, analysis-coordinator, board-meeting-processor)
+- Initialize database with migrations
+
+### Checking Deployment Status
+
+After deployment, verify the application is running:
 ```bash
-npm run deploy
+raindrop build status
+```
+
+View the public API URL:
+```bash
+raindrop build find
+```
+
+Monitor logs in real-time:
+```bash
+raindrop logs tail
 ```
 
 ## Configuration
 
-The application is configured through `raindrop.config.js`:
+The application is configured through multiple files:
 
-- **Entry point**: `src/index.js`
-- **Output directory**: `dist/`
-- **Dev server port**: 3000
+- **raindrop.manifest**: Defines services, observers, databases, and buckets
+- **tsconfig.json**: TypeScript compiler configuration
+- **package.json**: Dependencies and build scripts
+- **Output directory**: `virtual-c-suite/dist/`
+
+### Key Services
+
+- **upload-api**: Public API for file uploads (Hono-based)
+- **analysis-coordinator**: Private service for coordinating AI analysis
+- **board-meeting-processor**: Observer that processes uploaded files
+- **tracking-db**: SQL database for request tracking
+- **input-bucket/output-bucket**: File storage buckets
 
 ## Contributing
 
