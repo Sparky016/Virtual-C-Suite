@@ -1,12 +1,17 @@
-import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { BucketListOptions } from '@liquidmetal-ai/raindrop-framework';
+import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { StorageService } from '../services/StorageService';
 import { CacheService } from '../services/CacheService';
+import { MockD1Database, MockBucket, MockKV, MockAI, RaindropAI } from '../utils/local-mocks';
+import { config } from 'dotenv';
+
+// Load environment variables from .env file
+config();
 
 // Create Hono app with middleware
 export const app = new Hono<{ Bindings: Env }>();
@@ -14,8 +19,18 @@ export const app = new Hono<{ Bindings: Env }>();
 if (process.env.START_LOCAL_SERVER === 'true') {
   const port = parseInt(process.env.PORT || '3001');
   console.log(`Server is running on port ${port}`);
+
+  const env = {
+    ...process.env,
+    TRACKING_DB: new MockD1Database(),
+    INPUT_BUCKET: new MockBucket(),
+    OUTPUT_BUCKET: new MockBucket(),
+    mem: new MockKV(),
+    AI: process.env.USE_REAL_AI === 'true' ? new RaindropAI() : new MockAI(),
+  };
+
   serve({
-    fetch: app.fetch,
+    fetch: (request) => app.fetch(request, env),
     port
   });
 }

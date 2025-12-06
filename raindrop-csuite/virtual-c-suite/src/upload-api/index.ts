@@ -10,14 +10,26 @@ import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { serve } from '@hono/node-server';
 import { fileURLToPath } from 'url';
+import { config } from 'dotenv';
+import { MockD1Database, MockBucket } from '../utils/local-mocks';
+
+// Load environment variables from .env file
+config();
 
 const app = createHonoApp();
 
 if (process.env.START_LOCAL_SERVER === 'true') {
   const port = parseInt(process.env.PORT || '3000');
   console.log(`Server is running on port ${port}`);
+
+  const env = {
+    ...process.env,
+    TRACKING_DB: new MockD1Database(),
+    INPUT_BUCKET: new MockBucket(),
+  };
+
   serve({
-    fetch: app.fetch,
+    fetch: (request) => app.fetch(request, env),
     port
   });
 }
