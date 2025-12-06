@@ -248,15 +248,3 @@ export default class extends Service<Env> {
     return app.fetch(request, this.env);
   }
 }
-
-// Local Development Shim
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const port = parseInt(process.env.PORT || '3000');
-  console.log(`Starting local development server on port ${port}...`);
-
-  // Mock Env if needed or just serve
-  serve({
-    fetch: app.fetch,
-    port
-  });
-}

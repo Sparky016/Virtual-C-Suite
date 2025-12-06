@@ -3,8 +3,6 @@ import {
   Each,
   Message,
 } from "@liquidmetal-ai/raindrop-framework";
-import { serve } from '@hono/node-server';
-import { fileURLToPath } from 'url';
 import { Hono } from 'hono';
 import { Env } from './raindrop.gen';
 import { formatFinalReport } from '../shared/prompts';
@@ -149,18 +147,4 @@ export default class extends Each<BucketEventNotification, Env> {
       }
     }
   }
-}
-
-// Local Development Shim
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const port = parseInt(process.env.PORT || '3002');
-  console.log(`Starting local development server on port ${port}...`);
-
-  const app = new Hono();
-  app.get('/health', (c) => c.json({ status: 'ok', service: 'board-meeting-processor', timestamp: new Date().toISOString() }));
-
-  serve({
-    fetch: app.fetch,
-    port
-  });
 }
