@@ -1,66 +1,205 @@
-import { expect, test, describe } from 'vitest';
-
-// Example Hono service tests
-// Uncomment these tests once you have implemented your service logic
-
-/*
-import Service from './index';
+import { expect, test, describe, vi } from 'vitest';
+import { app } from './index';
 import { Env } from './raindrop.gen';
 
-describe('Service', () => {
+// Mock types
+type MockBucket = {
+  list: any;
+  get: any;
+  put: any;
+  search?: any;
+  documentChat?: any;
+  getPaginatedResults?: any;
+};
+
+type MockCache = {
+  put: any;
+  get: any;
+};
+
+describe('Analysis Coordinator Service', () => {
+  const createEnv = () => {
+    const mockInputBucket: MockBucket = {
+      list: vi.fn(),
+      get: vi.fn(),
+      put: vi.fn(),
+      search: vi.fn(),
+      documentChat: vi.fn(),
+      getPaginatedResults: vi.fn(),
+    };
+
+    const mockCache: MockCache = {
+      put: vi.fn(),
+      get: vi.fn(),
+    };
+
+    return {
+      env: {
+        INPUT_BUCKET: mockInputBucket,
+        mem: mockCache,
+      } as unknown as Env,
+      mocks: {
+        bucket: mockInputBucket,
+        cache: mockCache,
+      }
+    };
+  };
+
   test('health check endpoint', async () => {
-    const service = new Service();
-    const env = {} as Env;
+    const { env } = createEnv();
     const request = new Request('http://localhost/health');
-    const response = await service.fetch(request, env);
-    
+    const response = await app.fetch(request, env);
+
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body: any = await response.json();
     expect(body.status).toBe('ok');
     expect(body.timestamp).toBeDefined();
   });
 
-  test('hello endpoint', async () => {
-    const service = new Service();
-    const env = {} as Env;
-    const request = new Request('http://localhost/api/hello');
-    const response = await service.fetch(request, env);
-    
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.message).toBe('Hello from Hono!');
-  });
+  describe('Document Management', () => {
+    test('list documents', async () => {
+      const { env, mocks } = createEnv();
 
-  test('hello with name parameter', async () => {
-    const service = new Service();
-    const env = {} as Env;
-    const request = new Request('http://localhost/api/hello/world');
-    const response = await service.fetch(request, env);
-    
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.message).toBe('Hello, world!');
-  });
+      mocks.bucket.list.mockResolvedValue({
+        objects: [
+          { key: 'doc1.pdf', size: 1024, uploaded: new Date(), etag: 'tag1' },
+          { key: 'doc2.pdf', size: 2048, uploaded: new Date(), etag: 'tag2' }
+        ],
+        truncated: false
+      });
 
-  test('echo endpoint', async () => {
-    const service = new Service();
-    const env = {} as Env;
-    const testData = { message: 'test' };
-    const request = new Request('http://localhost/api/echo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testData)
+      const request = new Request('http://localhost/api/documents?limit=10');
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('list documents failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+      const body: any = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.objects.length).toBe(2);
+      expect(mocks.bucket.list).toHaveBeenCalledWith({ prefix: undefined, limit: 10 });
     });
-    const response = await service.fetch(request, env);
-    
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.received).toEqual(testData);
-  });
-});
-*/
 
-// Basic test to ensure test setup works
-test('test setup is working', async () => {
-  expect(true).toBe(true);
+    test('get document', async () => {
+      const { env, mocks } = createEnv();
+
+      const fileContent = 'test content';
+      mocks.bucket.get.mockResolvedValue({
+        body: fileContent,
+        size: fileContent.length,
+        etag: 'tag1',
+        uploaded: new Date(),
+        httpMetadata: { contentType: 'text/plain' }
+      });
+
+      const request = new Request('http://localhost/api/documents/doc1.txt');
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('get document failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(fileContent);
+      expect(mocks.bucket.get).toHaveBeenCalledWith('doc1.txt');
+    });
+
+    test('search documents', async () => {
+      const { env, mocks } = createEnv();
+
+      mocks.bucket.search.mockResolvedValue({
+        results: [{ score: 0.9, content: 'found' }],
+        pagination: { total: 1 }
+      });
+
+      const request = new Request('http://localhost/api/documents/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: 'test' })
+      });
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('search documents failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+      const body: any = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.results.length).toBe(1);
+      expect(mocks.bucket.search).toHaveBeenCalled();
+    });
+
+    test('document chat', async () => {
+      const { env, mocks } = createEnv();
+
+      mocks.bucket.documentChat.mockResolvedValue({
+        answer: 'This is the answer'
+      });
+
+      const request = new Request('http://localhost/api/documents/chat', {
+        method: 'POST',
+        body: JSON.stringify({ objectId: 'doc1.pdf', query: 'What is this?' })
+      });
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('document chat failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+      const body: any = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.answer).toBe('This is the answer');
+      expect(mocks.bucket.documentChat).toHaveBeenCalled();
+    });
+  });
+
+  describe('KV Cache', () => {
+    test('put cache', async () => {
+      const { env, mocks } = createEnv();
+
+      mocks.cache.put.mockResolvedValue(undefined);
+
+      const request = new Request('http://localhost/api/cache', {
+        method: 'POST',
+        body: JSON.stringify({ key: 'k1', value: { foo: 'bar' }, ttl: 60 })
+      });
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('put cache failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+      expect(mocks.cache.put).toHaveBeenCalledWith('k1', JSON.stringify({ foo: 'bar' }), { expirationTtl: 60 });
+    });
+
+    test('get cache', async () => {
+      const { env, mocks } = createEnv();
+
+      mocks.cache.get.mockResolvedValue({ foo: 'bar' });
+
+      const request = new Request('http://localhost/api/cache/k1');
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('get cache failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+      const body: any = await response.json();
+      expect(body.value).toEqual({ foo: 'bar' });
+      expect(mocks.cache.get).toHaveBeenCalledWith('k1', { type: 'json' });
+    });
+
+    test('get cache miss', async () => {
+      const { env, mocks } = createEnv();
+
+      mocks.cache.get.mockResolvedValue(null);
+
+      const request = new Request('http://localhost/api/cache/k1');
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 404) {
+        console.error('get cache miss failed (status ' + response.status + '):', await response.text());
+      }
+      expect(response.status).toBe(404);
+    });
+  });
 });

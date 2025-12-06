@@ -251,4 +251,43 @@ describe('DatabaseService', () => {
       });
     });
   });
+  describe('createExecutiveAnalysis', () => {
+    it('should create an executive analysis record', async () => {
+      const mockDb = createMockDb();
+      const service = new DatabaseService(mockDb as any);
+
+      await service.createExecutiveAnalysis('req-123', 'CFO', 'analysis content', 1234567890);
+
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO executive_analyses')
+      );
+      expect(mockDb.mockBind).toHaveBeenCalledWith(
+        'req-123',
+        'CFO',
+        'analysis content',
+        1234567890
+      );
+      expect(mockDb.mockRun).toHaveBeenCalled();
+    });
+  });
+
+  describe('createFinalReport', () => {
+    it('should create a final report record', async () => {
+      const mockDb = createMockDb();
+      const service = new DatabaseService(mockDb as any);
+
+      await service.createFinalReport('req-123', 'report content', 'key', 1234567890);
+
+      expect(mockDb.prepare).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO final_reports')
+      );
+      expect(mockDb.mockBind).toHaveBeenCalledWith(
+        'req-123',
+        'report content',
+        'key',
+        1234567890
+      );
+      expect(mockDb.mockRun).toHaveBeenCalled();
+    });
+  });
 });

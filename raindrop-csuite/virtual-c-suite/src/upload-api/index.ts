@@ -5,6 +5,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { StatusService } from '../services/StatusService';
 import { ReportService } from '../services/ReportService';
 import { LoggerService } from '../services/LoggerService';
+import { StorageService } from '../services/StorageService';
 import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
 
@@ -29,6 +30,7 @@ app.post('/upload', async (c) => {
     const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
     const databaseService = new DatabaseService(c.env.TRACKING_DB);
     const uploadService = new UploadService(loggerService);
+    const storageService = new StorageService(c.env.INPUT_BUCKET);
 
     // Validate upload request using service
     const validationResult = await uploadService.validateUploadRequest(file, userId);
@@ -87,7 +89,7 @@ app.post('/upload', async (c) => {
 
     // Upload to input bucket
     const arrayBuffer = await file!.arrayBuffer();
-    await c.env.INPUT_BUCKET.put(fileKey, new Uint8Array(arrayBuffer), putOptions);
+    await storageService.put(fileKey, new Uint8Array(arrayBuffer), putOptions);
 
     // Store request in database using service
     await databaseService.createAnalysisRequest(requestId, userId, fileKey, 'processing');

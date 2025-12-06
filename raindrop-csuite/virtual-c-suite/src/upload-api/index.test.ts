@@ -7,7 +7,8 @@ const {
   mockRateLimiter,
   mockStatusService,
   mockReportService,
-  mockLoggerService
+  mockLoggerService,
+  mockStorageService
 } = vi.hoisted(() => {
   return {
     mockUploadService: {
@@ -37,6 +38,13 @@ const {
       trackFileUploadFailed: vi.fn(),
       error: vi.fn(),
       warn: vi.fn()
+    },
+    mockStorageService: {
+      put: vi.fn(),
+      get: vi.fn(),
+      list: vi.fn(),
+      search: vi.fn(),
+      documentChat: vi.fn()
     }
   };
 });
@@ -60,6 +68,10 @@ vi.mock('../services/ReportService', () => ({
 
 vi.mock('../services/LoggerService', () => ({
   LoggerService: vi.fn(() => mockLoggerService)
+}));
+
+vi.mock('../services/StorageService', () => ({
+  StorageService: vi.fn(() => mockStorageService)
 }));
 
 vi.mock('../shared/rate-limiter', () => ({
@@ -123,7 +135,7 @@ describe('Upload API', () => {
       expect(body.status).toBe('processing');
 
       expect(mockUploadService.validateUploadRequest).toHaveBeenCalled();
-      expect(env.INPUT_BUCKET.put).toHaveBeenCalled();
+      expect(mockStorageService.put).toHaveBeenCalled();
       expect(mockDatabaseService.createAnalysisRequest).toHaveBeenCalledWith('REQ123', 'user123', 'user123/REQ123/test.csv', 'processing');
       expect(mockUploadService.trackUploadSuccess).toHaveBeenCalled();
     });

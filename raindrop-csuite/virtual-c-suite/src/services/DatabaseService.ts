@@ -128,4 +128,35 @@ export class DatabaseService {
       synthesis: requestStatus === 'completed' ? 'completed' : 'pending'
     };
   }
+
+  /**
+   * Create executive analysis record
+   */
+  async createExecutiveAnalysis(
+    requestId: string,
+    executiveRole: string,
+    analysisText: string,
+    createdAt: number
+  ): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
+       VALUES (?, ?, ?, ?)`
+    ).bind(requestId, executiveRole, analysisText, createdAt).run();
+  }
+
+  /**
+   * Create final report record
+   */
+  async createFinalReport(
+    requestId: string,
+    reportContent: string,
+    reportKey: string,
+    createdAt: number
+  ): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO final_reports (request_id, report_content, report_key, created_at)
+       VALUES (?, ?, ?, ?)`
+    ).bind(requestId, reportContent, reportKey, createdAt).run();
+  }
 }
+

@@ -4,9 +4,11 @@ import {
   Message,
 } from "@liquidmetal-ai/raindrop-framework";
 import { Env } from './raindrop.gen';
-import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt, formatFinalReport } from '../shared/prompts';
-import { retryAICall, RetryResult } from '../shared/retry-logic';
-import { trackEvent, trackAIPerformance, AnalyticsEvents } from '../shared/analytics';
+import { formatFinalReport } from '../shared/prompts';
+import { trackEvent, AnalyticsEvents } from '../shared/analytics';
+import { DatabaseService } from '../services/DatabaseService';
+import { StorageService } from '../services/StorageService';
+import { AIOrchestrationService } from '../services/AIOrchestrationService';
 
 interface ProcessorEnv extends Env {
   POSTHOG_API_KEY?: string;
@@ -35,11 +37,17 @@ export default class extends Each<BucketEventNotification, Env> {
     const startTime = Date.now();
     let requestId: string | undefined;
 
+    // Initialize Services
+    const inputStorage = new StorageService(this.env.INPUT_BUCKET);
+    const outputStorage = new StorageService(this.env.OUTPUT_BUCKET);
+    const dbService = new DatabaseService(this.env.TRACKING_DB);
+    const aiService = new AIOrchestrationService(this.env.AI, (this.env as ProcessorEnv).POSTHOG_API_KEY);
+
     try {
       console.log(`Processing uploaded file: ${event.object.key}`);
 
       // Extract request ID from object metadata or key
-      const file = await this.env.INPUT_BUCKET.get(event.object.key);
+      const file = await inputStorage.get(event.object.key);
       if (!file) {
         console.error('File not found in bucket:', event.object.key);
         return;
@@ -64,160 +72,43 @@ export default class extends Each<BucketEventNotification, Env> {
       const fileContent = await file.text();
       console.log(`File content length: ${fileContent.length} characters`);
 
-      // SCATTER: Parallel AI analysis from three expert perspectives with retry logic
-      console.log('Starting parallel AI analysis with retry support...');
-      const aiStartTime = Date.now();
+      // Execute Executive Analyses (CFO, CMO, COO)
+      const executives = await aiService.executeExecutiveAnalyses({ fileContent, requestId, userId });
 
-      const [cfoRetryResult, cmoRetryResult, cooRetryResult] = await Promise.all([
-        // CFO Analysis with retry
-        retryAICall(
-          this.env.AI,
-          'llama-3.3-70b',
-          {
-            model: 'llama-3.3-70b',
-            messages: [{ role: 'user', content: getCFOPrompt(fileContent) }],
-            temperature: 0.7,
-            max_tokens: 800
-          },
-          undefined, // Use default retry config
-          'CFO Analysis'
-        ),
-
-        // CMO Analysis with retry
-        retryAICall(
-          this.env.AI,
-          'llama-3.3-70b',
-          {
-            model: 'llama-3.3-70b',
-            messages: [{ role: 'user', content: getCMOPrompt(fileContent) }],
-            temperature: 0.7,
-            max_tokens: 800
-          },
-          undefined,
-          'CMO Analysis'
-        ),
-
-        // COO Analysis with retry
-        retryAICall(
-          this.env.AI,
-          'llama-3.3-70b',
-          {
-            model: 'llama-3.3-70b',
-            messages: [{ role: 'user', content: getCOOPrompt(fileContent) }],
-            temperature: 0.7,
-            max_tokens: 800
-          },
-          undefined,
-          'COO Analysis'
-        )
-      ]);
-
-      const aiDuration = Date.now() - aiStartTime;
-      console.log(`Parallel AI analysis completed in ${aiDuration}ms (CFO: ${cfoRetryResult.attempts} attempts, CMO: ${cmoRetryResult.attempts} attempts, COO: ${cooRetryResult.attempts} attempts)`);
-
-      // Check if any AI call failed after retries
-      if (!cfoRetryResult.success || !cmoRetryResult.success || !cooRetryResult.success) {
-        const failedRoles = [
-          !cfoRetryResult.success ? 'CFO' : null,
-          !cmoRetryResult.success ? 'CMO' : null,
-          !cooRetryResult.success ? 'COO' : null
-        ].filter(Boolean);
-
-        throw new Error(`AI analysis failed for: ${failedRoles.join(', ')}. Errors: ${[cfoRetryResult.error?.message, cmoRetryResult.error?.message, cooRetryResult.error?.message].filter(Boolean).join('; ')}`);
-      }
-
-      // Extract analysis text from successful results
-      const cfoAnalysis = cfoRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
-      const cmoAnalysis = cmoRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
-      const cooAnalysis = cooRetryResult.data?.choices[0]?.message?.content || 'Analysis unavailable';
-
-      // Track AI performance for each executive
-      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'CFO', cfoRetryResult.totalDuration, cfoRetryResult.attempts, cfoRetryResult.success, { request_id: requestId });
-      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'CMO', cmoRetryResult.totalDuration, cmoRetryResult.attempts, cmoRetryResult.success, { request_id: requestId });
-      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'COO', cooRetryResult.totalDuration, cooRetryResult.attempts, cooRetryResult.success, { request_id: requestId });
-
-      // Track individual executive analyses completed
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.CFO_ANALYSIS_COMPLETED, { request_id: requestId, duration_ms: cfoRetryResult.totalDuration });
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.CMO_ANALYSIS_COMPLETED, { request_id: requestId, duration_ms: cmoRetryResult.totalDuration });
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.COO_ANALYSIS_COMPLETED, { request_id: requestId, duration_ms: cooRetryResult.totalDuration });
-
-      // Store individual executive analyses in database
-      const createdAt = Date.now();
+      // Save individual analyses
+      const analysisCreatedAt = Date.now();
       await Promise.all([
-        this.env.TRACKING_DB.prepare(
-          `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
-           VALUES (?, ?, ?, ?)`
-        ).bind(requestId, 'CFO', cfoAnalysis, createdAt).run(),
-
-        this.env.TRACKING_DB.prepare(
-          `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
-           VALUES (?, ?, ?, ?)`
-        ).bind(requestId, 'CMO', cmoAnalysis, createdAt).run(),
-
-        this.env.TRACKING_DB.prepare(
-          `INSERT INTO executive_analyses (request_id, executive_role, analysis_text, created_at)
-           VALUES (?, ?, ?, ?)`
-        ).bind(requestId, 'COO', cooAnalysis, createdAt).run()
+        dbService.createExecutiveAnalysis(requestId, 'CFO', executives.cfo.analysis, analysisCreatedAt),
+        dbService.createExecutiveAnalysis(requestId, 'CMO', executives.cmo.analysis, analysisCreatedAt),
+        dbService.createExecutiveAnalysis(requestId, 'COO', executives.coo.analysis, analysisCreatedAt)
       ]);
 
-      // GATHER: CEO Synthesis with retry logic
-      console.log('Starting CEO synthesis with retry support...');
-      const synthesisStartTime = Date.now();
-
-      const ceoRetryResult = await retryAICall(
-        this.env.AI,
-        'llama-3.3-70b',
-        {
-          model: 'llama-3.3-70b',
-          messages: [{ role: 'user', content: getCEOSynthesisPrompt(cfoAnalysis, cmoAnalysis, cooAnalysis) }],
-          temperature: 0.8,
-          max_tokens: 1000
-        },
-        undefined,
-        'CEO Synthesis'
+      // Execute CEO Synthesis
+      const ceo = await aiService.executeCEOSynthesis(
+        { fileContent, requestId, userId },
+        executives.cfo.analysis,
+        executives.cmo.analysis,
+        executives.coo.analysis
       );
-
-      const synthesisDuration = Date.now() - synthesisStartTime;
-      console.log(`CEO synthesis completed in ${synthesisDuration}ms (${ceoRetryResult.attempts} attempts)`);
-
-      // Check if CEO synthesis failed after retries
-      if (!ceoRetryResult.success) {
-        throw new Error(`CEO synthesis failed after ${ceoRetryResult.attempts} attempts: ${ceoRetryResult.error?.message}`);
-      }
-
-      const ceoSynthesis = ceoRetryResult.data?.choices[0]?.message?.content || 'Synthesis unavailable';
-
-      // Track CEO synthesis performance
-      trackAIPerformance((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, 'CEO', ceoRetryResult.totalDuration, ceoRetryResult.attempts, ceoRetryResult.success, { request_id: requestId });
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.CEO_SYNTHESIS_COMPLETED, { request_id: requestId, duration_ms: ceoRetryResult.totalDuration });
 
       // Generate final report
       const finalReport = formatFinalReport(
         requestId,
-        cfoAnalysis,
-        cmoAnalysis,
-        cooAnalysis,
-        ceoSynthesis
+        executives.cfo.analysis,
+        executives.cmo.analysis,
+        executives.coo.analysis,
+        ceo.synthesis
       );
 
       // Save report to output bucket
       const reportKey = `reports/${requestId}/final-report.md`;
-      await this.env.OUTPUT_BUCKET.put(reportKey, finalReport);
+      await outputStorage.put(reportKey, finalReport);
 
       // Store final report in database
-      const reportCreatedAt = Date.now();
-      await this.env.TRACKING_DB.prepare(
-        `INSERT INTO final_reports (request_id, report_content, report_key, created_at)
-         VALUES (?, ?, ?, ?)`
-      ).bind(requestId, finalReport, reportKey, reportCreatedAt).run();
+      await dbService.createFinalReport(requestId, finalReport, reportKey, Date.now());
 
       // Update request status to completed
-      const completedAt = Date.now();
-      await this.env.TRACKING_DB.prepare(
-        `UPDATE analysis_requests
-         SET status = ?, completed_at = ?
-         WHERE request_id = ?`
-      ).bind('completed', completedAt, requestId).run();
+      await dbService.updateAnalysisRequestStatus(requestId, 'completed', undefined, Date.now());
 
       const totalDuration = Date.now() - startTime;
       console.log(`Total processing completed in ${totalDuration}ms for request ${requestId}`);
@@ -226,8 +117,8 @@ export default class extends Each<BucketEventNotification, Env> {
       trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.REPORT_GENERATED, {
         request_id: requestId,
         total_duration_ms: totalDuration,
-        ai_duration_ms: aiDuration,
-        synthesis_duration_ms: synthesisDuration
+        ai_duration_ms: (executives.cfo.duration + executives.cmo.duration + executives.coo.duration) / 3, // Avg duration
+        synthesis_duration_ms: ceo.duration
       });
 
       trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_COMPLETED, {
@@ -242,7 +133,7 @@ export default class extends Each<BucketEventNotification, Env> {
       // Update request status to failed
       if (requestId) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const userId = (await this.env.INPUT_BUCKET.get(event.object.key))?.customMetadata?.userId as string || 'unknown';
+        const userId = 'unknown';
 
         // Track analysis failure
         trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_FAILED, {
@@ -251,11 +142,7 @@ export default class extends Each<BucketEventNotification, Env> {
           duration_ms: Date.now() - startTime
         });
 
-        await this.env.TRACKING_DB.prepare(
-          `UPDATE analysis_requests
-           SET status = ?, error_message = ?
-           WHERE request_id = ?`
-        ).bind('failed', errorMessage, requestId).run();
+        await dbService.updateAnalysisRequestStatus(requestId, 'failed', errorMessage);
       }
     }
   }
