@@ -1,8 +1,12 @@
-// PostHog Analytics Integration for Virtual C-Suite
+
 import { PostHog } from 'posthog-node';
+import { AppBindings } from '../config/env';
 
 // Singleton PostHog client
 let posthogClient: PostHog | null = null;
+
+// PostHog Configuration
+const POSTHOG_HOST = 'https://us.i.posthog.com';
 
 /**
  * Initialize PostHog client (lazy initialization)
@@ -15,11 +19,12 @@ function getPostHogClient(apiKey?: string): PostHog | null {
 
   if (!posthogClient) {
     posthogClient = new PostHog(apiKey, {
-      host: 'https://app.posthog.com',
-      flushAt: 10, // Batch events
-      flushInterval: 10000 // Flush every 10 seconds
+      host: POSTHOG_HOST,
+      enableExceptionAutocapture: true,
+      flushAt: 1, // Flush immediately for development/testing
+      flushInterval: 0 // Flush immediately
     });
-    console.log('PostHog analytics initialized');
+    console.log(`PostHog analytics initialized with host: ${POSTHOG_HOST}`);
   }
 
   return posthogClient;
@@ -77,6 +82,7 @@ export function trackEvent(
   if (!client) return;
 
   try {
+    // console.log(`Tracking event: ${event} for user: ${userId}`);
     client.capture({
       distinctId: userId,
       event,
@@ -86,6 +92,10 @@ export function trackEvent(
         environment: process.env.NODE_ENV || 'production'
       }
     });
+
+    // Attempt to flush immediately
+    client.flush().catch(err => console.error('Error flushing events:', err));
+
   } catch (error) {
     console.error('Failed to track event:', error);
   }

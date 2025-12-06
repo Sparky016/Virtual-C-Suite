@@ -2,6 +2,7 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { UploadService } from './UploadService';
 import * as analytics from '../shared/analytics';
+import { LoggerService } from './LoggerService';
 
 // Mock analytics module
 vi.mock('../shared/analytics', () => ({
@@ -17,7 +18,7 @@ describe('UploadService', () => {
   let service: UploadService;
 
   beforeEach(() => {
-    service = new UploadService();
+    service = new UploadService(new LoggerService('test-key'));
     vi.clearAllMocks();
   });
 
@@ -143,7 +144,7 @@ describe('UploadService', () => {
       const metadata = service.prepareFileMetadata(request, file);
 
       expect(metadata.httpMetadata).toBeDefined();
-      expect(metadata.httpMetadata?.contentType).toBe('text/csv');
+      expect((metadata.httpMetadata as any)?.contentType).toBe('text/csv');
       expect(metadata.customMetadata).toBeDefined();
       expect(metadata.customMetadata?.requestId).toBe('REQ123');
       expect(metadata.customMetadata?.userId).toBe('user123');
@@ -161,7 +162,7 @@ describe('UploadService', () => {
 
       const metadata = service.prepareFileMetadata(request, file);
 
-      expect(metadata.httpMetadata?.contentType).toBe('application/octet-stream');
+      expect((metadata.httpMetadata as any)?.contentType).toBe('application/octet-stream');
     });
 
     test('includes timestamp in ISO format', () => {
@@ -236,7 +237,7 @@ describe('UploadService', () => {
     test('calls trackEvent with correct parameters', () => {
       const file = createMockFile('data.csv', 'text/csv', 5 * 1024 * 1024);
 
-      service.trackUploadSuccess('test-key', 'user123', 'REQ456', file, 'path/to/file');
+      service.trackUploadSuccess('user123', 'REQ456', file, 'path/to/file');
 
       expect(analytics.trackEvent).toHaveBeenCalledTimes(1);
       expect(analytics.trackEvent).toHaveBeenCalledWith(
@@ -256,7 +257,7 @@ describe('UploadService', () => {
     test('formats file size to 2 decimal places', () => {
       const file = createMockFile('data.csv', 'text/csv', 2.567 * 1024 * 1024);
 
-      service.trackUploadSuccess('test-key', 'user123', 'REQ456', file, 'key');
+      service.trackUploadSuccess('user123', 'REQ456', file, 'key');
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
         'test-key',
@@ -273,7 +274,7 @@ describe('UploadService', () => {
 
       // Should not throw
       expect(() => {
-        service.trackUploadSuccess(undefined, 'user123', 'REQ456', file, 'key');
+        service.trackUploadSuccess('user123', 'REQ456', file, 'key');
       }).not.toThrow();
     });
   });
@@ -282,7 +283,7 @@ describe('UploadService', () => {
     test('calls trackEvent with file details', () => {
       const file = createMockFile('data.csv', 'text/csv', 3.5 * 1024 * 1024);
 
-      service.trackValidationSuccess('test-key', 'user123', file);
+      service.trackValidationSuccess('user123', file);
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
         'test-key',
@@ -306,7 +307,7 @@ describe('UploadService', () => {
         received: '15.00'
       };
 
-      service.trackValidationFailure('test-key', 'user123', file, 'file_size_exceeded', details);
+      service.trackValidationFailure('user123', file, 'file_size_exceeded', details);
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
         'test-key',
@@ -345,7 +346,7 @@ describe('UploadService', () => {
       expect(metadata.customMetadata?.requestId).toBe(requestId);
 
       // 5. Track success
-      service.trackUploadSuccess('key', userId, requestId, file, fileKey);
+      service.trackUploadSuccess(userId, requestId, file, fileKey);
       expect(analytics.trackEvent).toHaveBeenCalled();
     });
 
@@ -359,7 +360,6 @@ describe('UploadService', () => {
       expect(validation.validationDetails).toBeDefined();
 
       service.trackValidationFailure(
-        'key',
         userId,
         file,
         validation.validationDetails!.reason,
@@ -367,7 +367,7 @@ describe('UploadService', () => {
       );
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'key',
+        'test-key',
         userId,
         analytics.AnalyticsEvents.FILE_VALIDATION_FAILED,
         expect.anything()

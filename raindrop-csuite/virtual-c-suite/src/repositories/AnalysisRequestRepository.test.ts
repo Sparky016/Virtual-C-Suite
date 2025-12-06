@@ -406,7 +406,7 @@ describe('AnalysisRequestRepository', () => {
       const retrieved = await repository.findById('REQ123');
 
       expect(retrieved).toBeDefined();
-      expect(retrieved?.request_id).toBe('REQ123');
+      expect(retrieved?.requestId).toBe('REQ123');
     });
 
     test('create, update, and retrieve request with error', async () => {

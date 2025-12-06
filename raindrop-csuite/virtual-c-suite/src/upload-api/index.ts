@@ -1,28 +1,14 @@
-import { Service } from '@liquidmetal-ai/raindrop-framework';
-import { Hono } from 'hono';
-import { logger } from 'hono/logger';
-import { BucketPutOptions } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { RateLimiter, getRateLimitHeaders } from '../shared/rate-limiter';
-import { FileValidationService } from '../services/FileValidationService';
 import { UploadService } from '../services/UploadService';
 import { DatabaseService } from '../services/DatabaseService';
 import { StatusService } from '../services/StatusService';
 import { ReportService } from '../services/ReportService';
 import { LoggerService } from '../services/LoggerService';
+import { createHonoApp } from '../utils/create-app';
+import { Service } from '@liquidmetal-ai/raindrop-framework';
 
-interface AppBindings extends Env {
-  ALLOWED_ORIGINS?: string;
-  JWT_ISSUER?: string;
-  JWT_AUDIENCE?: string;
-  RATE_LIMIT_PER_USER?: string;
-  POSTHOG_API_KEY?: string;
-}
-
-const app = new Hono<{ Bindings: AppBindings }>();
-
-// Add request logging middleware
-app.use('*', logger());
+const app = createHonoApp();
 
 // Initialize rate limiter (10 requests per 15 minutes per user)
 const rateLimiter = new RateLimiter();

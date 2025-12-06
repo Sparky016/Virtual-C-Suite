@@ -25,11 +25,11 @@ describe('LoggerService', () => {
 
   describe('trackEvent', () => {
     it('should call trackEvent with correct parameters', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackEvent('user-123', 'test_event', { foo: 'bar' });
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'test_event',
         { foo: 'bar' }
@@ -51,11 +51,11 @@ describe('LoggerService', () => {
 
   describe('trackAIPerformance', () => {
     it('should call trackAIPerformance with correct parameters', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackAIPerformance('user-123', 'CFO', 1500, 2, true, { request_id: 'req-123' });
 
       expect(analytics.trackAIPerformance).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'CFO',
         1500,
@@ -68,11 +68,11 @@ describe('LoggerService', () => {
 
   describe('trackRateLimitCheck', () => {
     it('should track rate limit check with allowed status', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackRateLimitCheck('user-123', true, 5);
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'rate_limit_checked',
         {
@@ -83,11 +83,11 @@ describe('LoggerService', () => {
     });
 
     it('should track rate limit check with exceeded status', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackRateLimitCheck('user-123', false, 0);
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'rate_limit_checked',
         {
@@ -100,11 +100,11 @@ describe('LoggerService', () => {
 
   describe('trackRateLimitExceeded', () => {
     it('should track rate limit exceeded event', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackRateLimitExceeded('user-123', 'Limit exceeded', 0, '2025-01-01T00:00:00Z');
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'rate_limit_exceeded',
         {
@@ -118,11 +118,11 @@ describe('LoggerService', () => {
 
   describe('trackFileValidated', () => {
     it('should track successful file validation', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackFileValidated('user-123', 'test.csv', 'text/csv', '1.5');
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'file_validated',
         {
@@ -136,14 +136,14 @@ describe('LoggerService', () => {
 
   describe('trackFileValidationFailed', () => {
     it('should track file validation failure', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackFileValidationFailed('user-123', 'file_size_exceeded', {
         size_mb: '15.5',
         limit_mb: 10
       });
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'file_validation_failed',
         {
@@ -157,11 +157,11 @@ describe('LoggerService', () => {
 
   describe('trackFileUploaded', () => {
     it('should track successful file upload', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackFileUploaded('user-123', 'req-123', 'test.csv', 'text/csv', '1.5', 'user-123/req-123/test.csv');
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'file_uploaded',
         {
@@ -177,11 +177,11 @@ describe('LoggerService', () => {
 
   describe('trackFileUploadFailed', () => {
     it('should track file upload failure', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackFileUploadFailed('user-123', 'Network error');
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'user-123',
         'file_upload_failed',
         {
@@ -193,7 +193,7 @@ describe('LoggerService', () => {
 
   describe('trackStatusChecked', () => {
     it('should track status check', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       const progress = {
         cfo: 'completed',
         cmo: 'completed',
@@ -204,7 +204,7 @@ describe('LoggerService', () => {
       logger.trackStatusChecked('req-123', 'processing', progress);
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'system',
         'status_checked',
         {
@@ -218,11 +218,11 @@ describe('LoggerService', () => {
 
   describe('trackReportRetrieved', () => {
     it('should track report retrieval', () => {
-      const logger = new LoggerService('test-key');
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
       logger.trackReportRetrieved('req-123', '2025-01-01T00:00:00Z');
 
       expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'test-key',
+        process.env.POSTHOG_API_KEY,
         'system',
         'report_retrieved',
         {
@@ -235,8 +235,8 @@ describe('LoggerService', () => {
 
   describe('console methods', () => {
     it('should call console.log for info', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      const logger = new LoggerService();
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
 
       logger.info('Test message', 'arg1', 'arg2');
 
@@ -245,8 +245,8 @@ describe('LoggerService', () => {
     });
 
     it('should call console.warn for warn', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const logger = new LoggerService();
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
 
       logger.warn('Warning message', 'arg1');
 
@@ -255,8 +255,8 @@ describe('LoggerService', () => {
     });
 
     it('should call console.error for error', () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const logger = new LoggerService();
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+      const logger = new LoggerService(process.env.POSTHOG_API_KEY);
 
       logger.error('Error message', new Error('test'));
 

@@ -1,0 +1,33 @@
+import { Hono } from 'hono';
+import { logger } from 'hono/logger';
+import { cors } from 'hono/cors';
+import { AppBindings } from '../config/env';
+
+/**
+ * Creates a pre-configured, type-safe Hono application instance.
+ * All common setup (middleware, environment types) is encapsulated here.
+ */
+export function createHonoApp(): Hono<{ Bindings: AppBindings }> {
+    // Instantiate the Hono app with the shared AppBindings type
+    const app = new Hono<{ Bindings: AppBindings }>();
+
+    // Apply global middleware here that should run for ALL services
+    app.use('*', logger());
+
+    // Configure CORS using the environment variable if available, or default to *
+    app.use('*', async (c, next) => {
+        const corsMiddleware = cors({
+            origin: (origin) => {
+                const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') || ['*'];
+                if (allowedOrigins.includes('*')) return origin; // Allow all if * is present (or default)
+                return allowedOrigins.includes(origin) ? origin : null;
+            },
+        });
+        return corsMiddleware(c, next);
+    });
+
+    return app;
+}
+
+// Optional: Re-export the utility type for easier imports elsewhere
+export type AppHono = Hono<{ Bindings: AppBindings }>;
