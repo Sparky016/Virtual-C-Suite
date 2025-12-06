@@ -13,6 +13,15 @@ import { fileURLToPath } from 'url';
 
 const app = createHonoApp();
 
+if (process.env.START_LOCAL_SERVER === 'true') {
+  const port = parseInt(process.env.PORT || '3000');
+  console.log(`Server is running on port ${port}`);
+  serve({
+    fetch: app.fetch,
+    port
+  });
+}
+
 // Initialize rate limiter (10 requests per 15 minutes per user)
 const rateLimiter = new RateLimiter();
 

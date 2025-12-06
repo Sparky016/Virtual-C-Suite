@@ -1,4 +1,5 @@
 import { Service } from '@liquidmetal-ai/raindrop-framework';
+import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -9,6 +10,15 @@ import { CacheService } from '../services/CacheService';
 
 // Create Hono app with middleware
 export const app = new Hono<{ Bindings: Env }>();
+
+if (process.env.START_LOCAL_SERVER === 'true') {
+  const port = parseInt(process.env.PORT || '3001');
+  console.log(`Server is running on port ${port}`);
+  serve({
+    fetch: app.fetch,
+    port
+  });
+}
 
 // Add request logging middleware
 app.use('*', logger());
