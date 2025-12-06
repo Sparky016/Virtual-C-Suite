@@ -8,6 +8,8 @@ import { LoggerService } from '../services/LoggerService';
 import { StorageService } from '../services/StorageService';
 import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
+import { serve } from '@hono/node-server';
+import { fileURLToPath } from 'url';
 
 const app = createHonoApp();
 
@@ -245,4 +247,16 @@ export default class extends Service<Env> {
   async fetch(request: Request): Promise<Response> {
     return app.fetch(request, this.env);
   }
+}
+
+// Local Development Shim
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const port = parseInt(process.env.PORT || '3000');
+  console.log(`Starting local development server on port ${port}...`);
+
+  // Mock Env if needed or just serve
+  serve({
+    fetch: app.fetch,
+    port
+  });
 }
