@@ -2,6 +2,31 @@
 
 A virtual C-Suite application built on the Raindrop platform for executive management and decision support.
 
+## Quick Reference
+
+**Local Development:**
+```bash
+npm run dev:all          # Run all services locally with hot reload
+npm run dev:upload       # Run upload-api only (port 3000)
+npm run dev:coord        # Run analysis-coordinator only (port 3001)
+npm run dev:processor    # Run board-meeting-processor only (port 3002)
+```
+
+**Production Deployment:**
+```bash
+npm start                # Deploy and start on Raindrop
+npm stop                 # Stop the application
+npm restart              # Restart the application
+```
+
+**Other Commands:**
+```bash
+npm test                 # Run tests
+npm run build            # Build TypeScript
+npm run lint             # Lint code
+npm run format           # Format code
+```
+
 ## Overview
 
 The Virtual C-Suite provides a comprehensive dashboard and executive team interface to help with strategic decision-making, performance monitoring, and team management.
@@ -17,8 +42,8 @@ The Virtual C-Suite provides a comprehensive dashboard and executive team interf
 
 ### Prerequisites
 
-- Raindrop CLI installed
-- Node.js (if running locally)
+- Node.js 18+ installed
+- Raindrop CLI installed (for production deployment)
 
 ### Installation
 
@@ -28,19 +53,30 @@ The Virtual C-Suite provides a comprehensive dashboard and executive team interf
    npm install
    ```
 
-3. Authenticate with Raindrop (if needed):
-   ```bash
-   raindrop auth login
-   ```
+3. Create a `.dev.vars` file for local environment variables (copy from `.dev.vars.example` if available)
 
-4. Start the development server:
-   ```bash
-   npm start
-   ```
-   or
-   ```bash
-   raindrop dev
-   ```
+### Running Locally
+
+For local development, use the dev scripts which run the services with hot reload on Node.js:
+
+**Run all services:**
+```bash
+npm run dev:all
+```
+
+This starts three services in parallel:
+- **upload-api** on port 3000
+- **analysis-coordinator** on port 3001
+- **board-meeting-processor** on port 3002
+
+**Run individual services:**
+```bash
+npm run dev:upload      # Upload API only (port 3000)
+npm run dev:coord       # Analysis Coordinator only (port 3001)
+npm run dev:processor   # Board Meeting Processor only (port 3002)
+```
+
+**Note:** Local development uses `@hono/node-server` and runs on Node.js with TypeScript compilation via `tsx`. Changes are automatically reloaded.
 
 ## Project Structure
 
@@ -79,42 +115,59 @@ Each executive provides consultation services and detailed profiles.
 
 ## Development
 
-### Building
+### Local Development vs Production
+
+This application has two distinct runtime environments:
+
+- **Local Development**: Runs on Node.js using `@hono/node-server` (see `src/*/local.ts` files)
+- **Production**: Runs on Cloudflare Workers via Raindrop platform (see `src/*/index.ts` files)
+
+The separation ensures Node.js-specific code doesn't interfere with the Cloudflare Workers build.
+
+### Building for Production
 
 To build the TypeScript application:
 
-1. Navigate to the virtual-c-suite directory:
-   ```bash
-   cd virtual-c-suite
-   ```
+```bash
+npm run build
+```
 
-2. Run the build command:
-   ```bash
-   npm run build
-   ```
+This will remove the `dist` directory and compile all TypeScript files. The build output is ready for deployment to the Raindrop platform.
 
-This will remove the `dist` directory and compile all TypeScript files.
+### Deploying to Production
 
-### Deployment
+**Prerequisites:**
+- Authenticate with Raindrop first:
+  ```bash
+  raindrop auth login
+  ```
 
-To deploy to Raindrop (run from repository root):
-
-1. Make sure you're authenticated:
-   ```bash
-   raindrop auth login
-   ```
-
-2. Deploy and start the application:
-   ```bash
-   raindrop build deploy --start
-   ```
+**Deploy and start:**
+```bash
+npm start
+```
+or
+```bash
+raindrop build deploy --start
+```
 
 This command will:
-- Validate the manifest
-- Build the TypeScript code
+- Validate the raindrop.manifest
+- Build the TypeScript code for Cloudflare Workers
+- Bundle handlers without Node.js dependencies
 - Upload the application to Raindrop
 - Start all services and observers (upload-api, analysis-coordinator, board-meeting-processor)
 - Initialize database with migrations
+
+**Stop the application:**
+```bash
+npm stop
+```
+
+**Restart the application:**
+```bash
+npm restart
+```
 
 ### Checking Deployment Status
 
@@ -131,6 +184,30 @@ raindrop build find
 Monitor logs in real-time:
 ```bash
 raindrop logs tail
+```
+
+### Testing
+
+Run tests:
+```bash
+npm test
+```
+
+Run tests in watch mode:
+```bash
+npm run test:watch
+```
+
+### Code Quality
+
+Format code:
+```bash
+npm run format
+```
+
+Lint code:
+```bash
+npm run lint
 ```
 
 ## Configuration

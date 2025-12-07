@@ -3,8 +3,6 @@ import {
   Each,
   Message,
 } from "@liquidmetal-ai/raindrop-framework";
-import { serve } from '@hono/node-server';
-import { Hono } from 'hono';
 import { Env } from './raindrop.gen';
 import { formatFinalReport } from '../shared/prompts';
 import { trackEvent, AnalyticsEvents } from '../shared/analytics';
@@ -148,19 +146,4 @@ export default class extends Each<BucketEventNotification, Env> {
       }
     }
   }
-}
-
-// Local server for health check and testing
-if (process.env.START_LOCAL_SERVER === 'true') {
-  const app = new Hono();
-
-  app.get('/health', (c) => c.json({ status: 'ok', service: 'board-meeting-processor' }));
-
-  const port = parseInt(process.env.PORT || '3002');
-  console.log(`Board Meeting Processor (Health Server) running on port ${port}`);
-
-  serve({
-    fetch: app.fetch,
-    port
-  });
 }
