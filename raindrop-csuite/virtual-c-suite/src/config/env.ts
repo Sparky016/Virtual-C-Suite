@@ -16,6 +16,9 @@ export type AppBindings = {
     JWT_AUDIENCE?: string;
     RATE_LIMIT_PER_USER?: string;
     POSTHOG_API_KEY?: string;
+    WORKOS_API_KEY?: string;
+    WORKOS_CLIENT_ID?: string;
+    WORKOS_SESSION_ENCRYPTION_KEY?: string;
     NODE_ENV?: 'development' | 'production';
 
     // Raindrop Infrastructure (Common)
