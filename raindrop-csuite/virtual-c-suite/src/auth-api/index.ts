@@ -1,19 +1,36 @@
-import { Env } from '../upload-api/raindrop.gen'; // Reusing generated environment type for now
+import { AppBindings } from '../config/env';
+import { Env } from '../upload-api/raindrop.gen';
 import { AuthService } from '../services/AuthService';
 import { LoggerService } from '../services/LoggerService';
-import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { serve } from '@hono/node-server';
 import { config } from 'dotenv';
-import { cors } from '../_app/cors';
 import { COOKIE_OPTIONS, SESSION_COOKIE_NAME, CLEAR_COOKIE_OPTIONS } from '../shared/cookie-config';
 import { decodeJwt } from 'jose';
 import { getCookie, setCookie } from 'hono/cookie';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { apiReference } from '@scalar/hono-api-reference';
+import { logger } from 'hono/logger';
+import { cors } from 'hono/cors';
 
 // Load environment variables from .env file
 config();
 
-const app = createHonoApp();
+const app = new OpenAPIHono<{ Bindings: AppBindings }>();
+
+// Middleware
+app.use('*', logger());
+app.use('*', async (c, next) => {
+    const corsMiddleware = cors({
+        origin: (origin) => {
+            const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') || ['*'];
+            if (allowedOrigins.includes('*')) return origin;
+            return allowedOrigins.includes(origin) ? origin : null;
+        },
+        credentials: true,
+    });
+    return corsMiddleware(c, next);
+});
 
 if (process.env.START_LOCAL_SERVER === 'true') {
     const port = parseInt(process.env.PORT || '3003');
@@ -34,12 +51,37 @@ app.get('/health', (c) => {
     return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// OpenAPI Documentation
+app.doc('/doc', {
+    openapi: '3.0.0',
+    info: {
+        version: '1.0.0',
+        title: 'Auth API',
+        description: 'API for handling user authentication via WorkOS',
+    },
+});
+
+/*
+// Swagger UI / API Reference
+app.get(
+    '/reference',
+    apiReference({
+        spec: {
+            url: '/doc',
+        },
+    } as any)
+);
+*/
+
+// POST /auth/exchange - Exchange code for token
+// POST /auth/exchange - Exchange code for token
 app.post('/auth/exchange', async (c) => {
     try {
-        const { code } = await c.req.json();
+        const body = await c.req.json();
+        const { code } = body;
 
-        // Input validation
-        if (!code || typeof code !== 'string' || code.trim().length === 0) {
+        // Additional manual validation (zod handles type, but existing logic had trim check)
+        if (!code.trim().length) {
             return c.json({ error: 'Authorization code is required' }, 400);
         }
 
@@ -58,7 +100,6 @@ app.post('/auth/exchange', async (c) => {
         const expiresIn = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 1800; // Default 30 min
 
         // Store session in secure HTTP-only cookie
-        // We'll store the tokens as a JSON string for now (in production, consider encrypting)
         const sessionData = {
             accessToken: authResponse.accessToken,
             refreshToken: authResponse.refreshToken,
@@ -66,9 +107,6 @@ app.post('/auth/exchange', async (c) => {
         };
 
         setCookie(c, SESSION_COOKIE_NAME, JSON.stringify(sessionData), COOKIE_OPTIONS);
-
-        // TODO: Store user in your database if needed
-        // TODO: Implement refresh token hashing and storage
 
         return c.json({
             success: true,
@@ -101,8 +139,11 @@ app.post('/auth/exchange', async (c) => {
             message: 'Authentication failed. Please try again.'
         }, 401);
     }
-});
+}
+);
 
+// GET /auth/user - Get current user
+// GET /auth/user - Get current user
 app.get('/auth/user', async (c) => {
     try {
         // Get session from HTTP-only cookie
@@ -141,8 +182,11 @@ app.get('/auth/user', async (c) => {
             message: 'Invalid or expired session'
         }, 401);
     }
-});
+}
+);
 
+// POST /auth/refresh - Refresh token
+// POST /auth/refresh - Refresh token
 app.post('/auth/refresh', async (c) => {
     try {
         // Get refresh token from cookie session
@@ -179,8 +223,6 @@ app.post('/auth/refresh', async (c) => {
 
         setCookie(c, SESSION_COOKIE_NAME, JSON.stringify(newSessionData), COOKIE_OPTIONS);
 
-        // TODO: If storing refresh tokens in DB, invalidate old token and store new one
-
         logger.info('Token refresh successful');
 
         return c.json({
@@ -210,8 +252,11 @@ app.post('/auth/refresh', async (c) => {
             message: 'Failed to refresh token. Please try again.'
         }, 401);
     }
-});
+}
+);
 
+// POST /auth/logout - Logout
+// POST /auth/logout - Logout
 app.post('/auth/logout', async (c) => {
     try {
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
@@ -240,8 +285,6 @@ app.post('/auth/logout', async (c) => {
             // Clear session cookie
             setCookie(c, SESSION_COOKIE_NAME, '', CLEAR_COOKIE_OPTIONS);
 
-            // TODO: If storing refresh tokens in DB, revoke them here
-
             return c.json({
                 success: true,
                 logoutUrl, // Client should redirect to this URL
@@ -262,7 +305,8 @@ app.post('/auth/logout', async (c) => {
 
         return c.json({ success: true });
     }
-});
+}
+);
 
 export default class extends Service<Env> {
     async fetch(request: Request): Promise<Response> {

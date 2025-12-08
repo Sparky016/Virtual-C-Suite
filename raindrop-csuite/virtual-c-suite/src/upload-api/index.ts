@@ -1,3 +1,4 @@
+import { AppBindings } from '../config/env';
 import { Env } from './raindrop.gen';
 import { RateLimiter, getRateLimitHeaders } from '../shared/rate-limiter';
 import { UploadService } from '../services/UploadService';
@@ -6,20 +7,59 @@ import { StatusService } from '../services/StatusService';
 import { ReportService } from '../services/ReportService';
 import { LoggerService } from '../services/LoggerService';
 import { StorageService } from '../services/StorageService';
-import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { apiReference } from '@scalar/hono-api-reference';
+import { logger } from 'hono/logger';
+import { cors } from 'hono/cors';
 
-const app = createHonoApp();
+const app = new OpenAPIHono<{ Bindings: AppBindings }>();
+export { app };
 
+// Middleware
+app.use('*', logger());
+app.use('*', async (c, next) => {
+  const corsMiddleware = cors({
+    origin: (origin) => {
+      const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') || ['*'];
+      if (allowedOrigins.includes('*')) return origin;
+      return allowedOrigins.includes(origin) ? origin : null;
+    },
+  });
+  return corsMiddleware(c, next);
+});
 
 // Initialize rate limiter (10 requests per 15 minutes per user)
 const rateLimiter = new RateLimiter();
 
-// Health check endpoint
+// Health check endpoint (OpenAPI converted to standard)
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+/*
+// OpenAPI Documentation
+app.doc('/doc', {
+  openapi: '3.0.0',
+  info: {
+    version: '1.0.0',
+    title: 'Upload API',
+    description: 'API for uploading documents for executive analysis.',
+  },
+});
+
+// Swagger UI / API Reference
+app.get(
+  '/reference',
+  apiReference({
+    spec: {
+      url: '/doc',
+    },
+  } as any)
+);
+*/
+
+// POST /upload - Upload file for analysis
 // POST /upload - Upload file for analysis
 app.post('/upload', async (c) => {
   try {
@@ -33,10 +73,9 @@ app.post('/upload', async (c) => {
     const uploadService = new UploadService(loggerService);
     const storageService = new StorageService(c.env.INPUT_BUCKET);
 
-    // Validate upload request using service
+    // Validate upload request using service (Logic reused)
     const validationResult = await uploadService.validateUploadRequest(file, userId);
     if (!validationResult.success) {
-      // Track validation failure if we have the necessary data
       if (file && userId && validationResult.validationDetails) {
         uploadService.trackValidationFailure(
           userId,
@@ -58,15 +97,12 @@ app.post('/upload', async (c) => {
 
     if (!rateLimitResult.allowed) {
       loggerService.warn(`Rate limit exceeded for user: ${userId}`);
-
-      // Track rate limit exceeded
       loggerService.trackRateLimitExceeded(
         userId,
         rateLimitResult.message!,
         rateLimitResult.remaining,
         new Date(rateLimitResult.resetAt).toISOString()
       );
-
       return c.json({
         error: 'Rate limit exceeded',
         message: rateLimitResult.message,
@@ -78,11 +114,11 @@ app.post('/upload', async (c) => {
     // Track successful validation
     uploadService.trackValidationSuccess(userId, file!);
 
-    // Generate request ID using service
+    // Generate request ID and keys
     const requestId = uploadService.generateRequestId();
     const fileKey = uploadService.buildFileKey(userId, requestId, file!.name);
 
-    // Prepare file metadata using service
+    // Prepare metadata
     const putOptions = uploadService.prepareFileMetadata(
       { file: file!, userId, requestId },
       file!
@@ -92,13 +128,13 @@ app.post('/upload', async (c) => {
     const arrayBuffer = await file!.arrayBuffer();
     await storageService.put(fileKey, new Uint8Array(arrayBuffer), putOptions);
 
-    // Store request in database using service
+    // Store request in DB
     await databaseService.createAnalysisRequest(requestId, userId, fileKey, 'processing');
 
-    // Track successful file upload using service
+    // Track success
     uploadService.trackUploadSuccess(userId, requestId, file!, fileKey);
 
-    // Return success with rate limit headers
+    // Return success
     return c.json({
       requestId,
       status: 'processing',
@@ -112,8 +148,6 @@ app.post('/upload', async (c) => {
   } catch (error) {
     const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
     loggerService.error('Upload error:', error);
-
-    // Track upload failure
     try {
       const formData = await c.req.formData();
       const userIdFromForm = formData.get('userId') as string;
@@ -123,17 +157,17 @@ app.post('/upload', async (c) => {
           error instanceof Error ? error.message : 'Unknown error'
         );
       }
-    } catch {
-      // Ignore error in error handler
-    }
+    } catch { }
 
     return c.json({
       error: 'Failed to upload file',
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-});
+}
+);
 
+// GET /status/:requestId - Get analysis status
 // GET /status/:requestId - Get analysis status
 app.get('/status/:requestId', async (c) => {
   try {
@@ -183,8 +217,10 @@ app.get('/status/:requestId', async (c) => {
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-});
+}
+);
 
+// GET /reports/:requestId - Get completed report
 // GET /reports/:requestId - Get completed report
 app.get('/reports/:requestId', async (c) => {
   try {
@@ -240,7 +276,8 @@ app.get('/reports/:requestId', async (c) => {
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-});
+}
+);
 
 export default class extends Service<Env> {
   async fetch(request: Request): Promise<Response> {

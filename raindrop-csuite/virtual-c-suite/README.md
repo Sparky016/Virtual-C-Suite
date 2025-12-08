@@ -113,6 +113,70 @@ Access your virtual C-Suite:
 
 Each executive provides consultation services and detailed profiles.
 
+## API Reference
+
+The application exposes two main APIs: the **Upload API** (public-facing) and the **Analysis Coordinator API** (internal/private).
+
+### Upload API
+
+Base URL: `http://localhost:3000` (Local)
+
+#### General
+- `GET /health`
+  - Check API health status.
+
+#### Analysis Operations
+- `POST /upload`
+  - Upload a file for analysis.
+  - **Body (multipart/form-data)**:
+    - `file`: The document file (PDF, DOCX, TXT).
+    - `userId`: ID of the uploading user.
+  - **Response**: Returns a `requestId` to track the analysis.
+
+- `GET /status/:requestId`
+  - Check the status of an ongoing analysis.
+  - **Params**: `requestId`
+  - **Response**: Usage status (e.g., `processing`, `completed`, `failed`) and progress.
+
+- `GET /reports/:requestId`
+  - Retrieve the final analysis report.
+  - **Params**: `requestId`
+  - **Response**: The markdown content of the final report.
+
+### Analysis Coordinator API
+
+Base URL: `http://localhost:3001` (Local)
+
+#### General
+- `GET /health`
+  - Check API health status.
+- `GET /api/config`
+  - Get service configuration and available resources status.
+
+#### Document Management
+- `GET /api/documents`
+  - List documents in the input bucket.
+  - **Query**: `prefix` (optional), `limit` (optional).
+
+- `GET /api/documents/:key`
+  - Download a specific document.
+
+- `POST /api/documents/search`
+  - Search document content.
+  - **Body (JSON)**: `query`, `page`, `pageSize`, `requestId`.
+
+- `POST /api/documents/chat`
+  - Chat with a specific document (RAG).
+  - **Body (JSON)**: `objectId` (file key), `query`.
+
+#### Cache Operations
+- `POST /api/cache`
+  - Store a value in the KV cache.
+  - **Body (JSON)**: `key`, `value`, `ttl` (optional).
+
+- `GET /api/cache/:key`
+  - Retrieve a value from the KV cache.
+
 ## Development
 
 ### Local Development vs Production
