@@ -7,6 +7,7 @@ export interface Env {
   };
   AI: Ai;
   annotation: Annotation<Omit<MRNObject, 'type' | 'applicationName' | 'versionId'>>;
+  AUTH_API: ServiceStub<import('../auth-api/index.js').default>;
   INPUT_BUCKET: Bucket;
   logger: Logger;
   mem: KvCache;

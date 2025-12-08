@@ -8,6 +8,7 @@ export interface Env {
   AI: Ai;
   ANALYSIS_COORDINATOR: ServiceStub<import('../analysis-coordinator/index.js').default>;
   annotation: Annotation<Omit<MRNObject, 'type' | 'applicationName' | 'versionId'>>;
+  AUTH_API: ServiceStub<import('../auth-api/index.js').default>;
   INPUT_BUCKET: Bucket;
   logger: Logger;
   mem: KvCache;

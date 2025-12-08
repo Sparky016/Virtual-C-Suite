@@ -4,6 +4,10 @@ application "virtual-c-suite" {
     visibility = "public"
   }
 
+  service "auth-api" {
+    visibility = "public"
+  }
+
   bucket "input-bucket" {
   }
 
