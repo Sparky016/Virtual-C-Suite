@@ -8,15 +8,14 @@ import { config } from 'dotenv';
 import { COOKIE_OPTIONS, SESSION_COOKIE_NAME, CLEAR_COOKIE_OPTIONS } from '../shared/cookie-config';
 import { decodeJwt } from 'jose';
 import { getCookie, setCookie } from 'hono/cookie';
-import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { apiReference } from '@scalar/hono-api-reference';
+import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
 
 // Load environment variables from .env file
 config();
 
-const app = new OpenAPIHono<{ Bindings: AppBindings }>();
+const app = new Hono<{ Bindings: AppBindings }>();
 
 // Middleware
 app.use('*', logger());
@@ -51,34 +50,15 @@ app.get('/health', (c) => {
     return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// OpenAPI Documentation
-app.doc('/doc', {
-    openapi: '3.0.0',
-    info: {
-        version: '1.0.0',
-        title: 'Auth API',
-        description: 'API for handling user authentication via WorkOS',
-    },
-});
-
-/*
-// Swagger UI / API Reference
-app.get(
-    '/reference',
-    apiReference({
-        spec: {
-            url: '/doc',
-        },
-    } as any)
-);
-*/
-
-// POST /auth/exchange - Exchange code for token
 // POST /auth/exchange - Exchange code for token
 app.post('/auth/exchange', async (c) => {
     try {
         const body = await c.req.json();
         const { code } = body;
+
+        if (!code || typeof code !== 'string') {
+            return c.json({ error: 'Authorization code is required' }, 400);
+        }
 
         // Additional manual validation (zod handles type, but existing logic had trim check)
         if (!code.trim().length) {
@@ -139,10 +119,8 @@ app.post('/auth/exchange', async (c) => {
             message: 'Authentication failed. Please try again.'
         }, 401);
     }
-}
-);
+});
 
-// GET /auth/user - Get current user
 // GET /auth/user - Get current user
 app.get('/auth/user', async (c) => {
     try {
@@ -182,10 +160,8 @@ app.get('/auth/user', async (c) => {
             message: 'Invalid or expired session'
         }, 401);
     }
-}
-);
+});
 
-// POST /auth/refresh - Refresh token
 // POST /auth/refresh - Refresh token
 app.post('/auth/refresh', async (c) => {
     try {
@@ -252,10 +228,8 @@ app.post('/auth/refresh', async (c) => {
             message: 'Failed to refresh token. Please try again.'
         }, 401);
     }
-}
-);
+});
 
-// POST /auth/logout - Logout
 // POST /auth/logout - Logout
 app.post('/auth/logout', async (c) => {
     try {
@@ -305,8 +279,7 @@ app.post('/auth/logout', async (c) => {
 
         return c.json({ success: true });
     }
-}
-);
+});
 
 export default class extends Service<Env> {
     async fetch(request: Request): Promise<Response> {

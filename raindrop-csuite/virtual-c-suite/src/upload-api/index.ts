@@ -8,12 +8,11 @@ import { ReportService } from '../services/ReportService';
 import { LoggerService } from '../services/LoggerService';
 import { StorageService } from '../services/StorageService';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
-import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { apiReference } from '@scalar/hono-api-reference';
+import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
 
-const app = new OpenAPIHono<{ Bindings: AppBindings }>();
+const app = new Hono<{ Bindings: AppBindings }>();
 export { app };
 
 // Middleware
@@ -37,29 +36,6 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-/*
-// OpenAPI Documentation
-app.doc('/doc', {
-  openapi: '3.0.0',
-  info: {
-    version: '1.0.0',
-    title: 'Upload API',
-    description: 'API for uploading documents for executive analysis.',
-  },
-});
-
-// Swagger UI / API Reference
-app.get(
-  '/reference',
-  apiReference({
-    spec: {
-      url: '/doc',
-    },
-  } as any)
-);
-*/
-
-// POST /upload - Upload file for analysis
 // POST /upload - Upload file for analysis
 app.post('/upload', async (c) => {
   try {
@@ -164,10 +140,8 @@ app.post('/upload', async (c) => {
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-}
-);
+});
 
-// GET /status/:requestId - Get analysis status
 // GET /status/:requestId - Get analysis status
 app.get('/status/:requestId', async (c) => {
   try {
@@ -217,10 +191,8 @@ app.get('/status/:requestId', async (c) => {
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-}
-);
+});
 
-// GET /reports/:requestId - Get completed report
 // GET /reports/:requestId - Get completed report
 app.get('/reports/:requestId', async (c) => {
   try {
@@ -276,8 +248,7 @@ app.get('/reports/:requestId', async (c) => {
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-}
-);
+});
 
 export default class extends Service<Env> {
   async fetch(request: Request): Promise<Response> {
