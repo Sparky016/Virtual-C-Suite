@@ -1,4 +1,8 @@
 import { requireAuthenticated, verifyIssuer } from '@liquidmetal-ai/raindrop-framework/core/auth';
+import { AuthService } from '../services/AuthService';
+import { LoggerService } from '../services/LoggerService';
+import { SESSION_COOKIE_NAME } from '../shared/cookie-config';
+import * as cookie from 'cookie';
 
 /**
  * verify is the application-wide JWT verification hook.
@@ -19,21 +23,35 @@ import { requireAuthenticated, verifyIssuer } from '@liquidmetal-ai/raindrop-fra
  * Verifies JWT against configured OIDC provider (e.g., WorkOS).
  */
 export const verify = async (request: Request, env: any) => {
-    const issuer = env.JWT_ISSUER as string;
-    const audience = env.JWT_AUDIENCE as string;
+    try {
+        // Parse cookies from header
+        const cookieHeader = request.headers.get('Cookie');
+        if (!cookieHeader) {
+            return false;
+        }
 
-    if (!issuer || !audience) {
-        // Fail closed if configuration is missing in production context
-        console.error("Auth configuration missing: JWT_ISSUER or JWT_AUDIENCE not set.");
+        const cookies = cookie.parse(cookieHeader);
+        const sessionCookie = cookies[SESSION_COOKIE_NAME];
+
+        if (!sessionCookie) {
+            return false;
+        }
+
+        const logger = new LoggerService(env.POSTHOG_API_KEY);
+        const authService = new AuthService(logger);
+
+        // Verify session cookie
+        const decodedClaims = await authService.verifySessionCookie(sessionCookie);
+
+        // Add user info to env for downstream use
+        env.user = decodedClaims;
+
+        return true;
+
+    } catch (error) {
+        console.error('Auth verification failed', error);
         return false;
     }
-
-    // Call verifyIssuer with request and env. 
-    // Assuming verifyIssuer reads issuer/audience from env or is capable of handling standard Env.
-    // We explicitly add them to env just in case verifyIssuer looks for specific keys if not found in vars,
-    // but usually it reads from env.JWT_ISSUER.
-    // We use 'as any' to bypass the specific Env type check if verifyIssuer expects a wider type.
-    return await verifyIssuer(request, { ...env, issuer, audience });
 };
 
 /**

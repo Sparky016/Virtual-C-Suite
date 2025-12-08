@@ -1,5 +1,4 @@
-
-import { trackEvent, flushAnalytics } from './src/shared/analytics';
+import { trackEvent, flushAnalytics } from './analytics';
 import dotenv from 'dotenv';
 import path from 'path';
 

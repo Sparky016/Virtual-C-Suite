@@ -5,7 +5,7 @@ import {
 } from "@liquidmetal-ai/raindrop-framework";
 import { Env } from './raindrop.gen';
 import { formatFinalReport } from '../shared/prompts';
-import { trackEvent, AnalyticsEvents } from '../shared/analytics';
+import { trackEvent, AnalyticsEvents } from '../analytics/analytics';
 import { DatabaseService } from '../services/DatabaseService';
 import { StorageService } from '../services/StorageService';
 import { AIOrchestrationService } from '../services/AIOrchestrationService';

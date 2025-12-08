@@ -1,69 +1,96 @@
-import { WorkOS } from '@workos-inc/node';
+import * as admin from 'firebase-admin';
 import { LoggerService } from './LoggerService';
 
+// Re-export or define types if needed by consumers
+export type DecodedIdToken = admin.auth.DecodedIdToken;
+export type UserRecord = admin.auth.UserRecord;
+
 export class AuthService {
-    private workos: WorkOS;
-    private clientId: string;
     private logger: LoggerService;
+    private auth: admin.auth.Auth;
 
-    constructor(apiKey: string, clientId: string, logger: LoggerService) {
-        this.workos = new WorkOS(apiKey);
-        this.clientId = clientId;
+    constructor(logger: LoggerService) {
         this.logger = logger;
+
+        if (!admin.apps.length) {
+            try {
+                // Initialize Firebase Admin SDK
+                // In production, this might use GOOGLE_APPLICATION_CREDENTIALS automatically
+                // For local dev, we might need specific config if not set in env
+                admin.initializeApp();
+                this.logger.info('Firebase Admin initialized');
+            } catch (error) {
+                this.logger.error('Failed to initialize Firebase Admin', error);
+                throw error;
+            }
+        }
+
+        this.auth = admin.auth();
     }
 
-    async authenticateWithCode(code: string) {
+    /**
+     * Verifies the ID token sent from the client
+     */
+    async verifyIdToken(idToken: string): Promise<DecodedIdToken> {
         try {
-            this.logger.info('Exchanging code for tokens');
-            const response = await this.workos.userManagement.authenticateWithCode({
-                code,
-                clientId: this.clientId,
-            });
-            this.logger.info(`Authentication successful for user: ${response.user.email}`);
-            return response;
+            const decodedToken = await this.auth.verifyIdToken(idToken);
+            return decodedToken;
         } catch (error) {
-            this.logger.error('Token exchange failed', error);
+            this.logger.error('Error verifying ID token:', error);
             throw error;
         }
     }
 
-    async getUser(accessToken: string) {
+    /**
+     * Creates a session cookie from an ID token
+     */
+    async createSessionCookie(idToken: string, expiresIn: number): Promise<string> {
         try {
-            this.logger.info('Fetching user profile');
-            const user = await this.workos.userManagement.getUser(accessToken);
-            return user;
+            const sessionCookie = await this.auth.createSessionCookie(idToken, { expiresIn });
+            return sessionCookie;
         } catch (error) {
-            this.logger.error('Failed to get user', error);
+            this.logger.error('Error creating session cookie:', error);
             throw error;
         }
     }
 
-    async authenticateWithRefreshToken(refreshToken: string) {
+    /**
+     * Verifies a session cookie
+     */
+    async verifySessionCookie(sessionCookie: string): Promise<DecodedIdToken> {
         try {
-            this.logger.info('Refreshing access token');
-            const response = await this.workos.userManagement.authenticateWithRefreshToken({
-                refreshToken,
-                clientId: this.clientId,
-            });
-            return response;
+            // checkForRevocation: true enforces that revoked sessions are rejected
+            const decodedClaims = await this.auth.verifySessionCookie(sessionCookie, true);
+            return decodedClaims;
         } catch (error) {
-            this.logger.error('Token refresh failed', error);
+            this.logger.error('Error verifying session cookie:', error);
             throw error;
         }
     }
 
-    async getAuthorizationUrl(redirectUri: string, state?: string) {
-        return this.workos.userManagement.getAuthorizationUrl({
-            provider: 'authkit',
-            redirectUri,
-            clientId: this.clientId,
-            state
-        });
+    /**
+     * Gets user user record from Firebase
+     */
+    async getUser(uid: string): Promise<UserRecord> {
+        try {
+            const userRecord = await this.auth.getUser(uid);
+            return userRecord;
+        } catch (error) {
+            this.logger.error('Error fetching user record:', error);
+            throw error;
+        }
     }
 
-    getLogoutUrl(sessionId: string): string {
-        return this.workos.userManagement.getLogoutUrl({
-            sessionId,
-        });
+    /**
+     * Revokes all refresh tokens for a user (effectively logging them out)
+     */
+    async revokeRefreshTokens(uid: string): Promise<void> {
+        try {
+            await this.auth.revokeRefreshTokens(uid);
+            this.logger.info(`Revoked tokens for user ${uid}`);
+        } catch (error) {
+            this.logger.error('Error revoking tokens:', error);
+            throw error;
+        }
     }
 }

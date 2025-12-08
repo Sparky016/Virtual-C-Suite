@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LoggerService } from './LoggerService';
-import * as analytics from '../shared/analytics';
+import * as analytics from '../analytics/analytics';
 
 // Mock the analytics module
 vi.mock('../shared/analytics', () => ({

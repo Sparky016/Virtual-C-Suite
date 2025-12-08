@@ -1,7 +1,7 @@
 // UploadService Tests - Business logic validation
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { UploadService } from './UploadService';
-import * as analytics from '../shared/analytics';
+import * as analytics from '../analytics/analytics';
 import { LoggerService } from './LoggerService';
 
 // Mock analytics module

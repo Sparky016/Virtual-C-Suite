@@ -16,9 +16,13 @@ export type AppBindings = {
     JWT_AUDIENCE?: string;
     RATE_LIMIT_PER_USER?: string;
     POSTHOG_API_KEY?: string;
-    WORKOS_API_KEY?: string;
-    WORKOS_CLIENT_ID?: string;
-    WORKOS_SESSION_ENCRYPTION_KEY?: string;
+
+    // Firebase Configuration
+    FIREBASE_PROJECT_ID?: string;
+    FIREBASE_CLIENT_EMAIL?: string;
+    FIREBASE_PRIVATE_KEY?: string;
+
+    FRONTEND_URL?: string;
     NODE_ENV?: 'development' | 'production';
 
     // Raindrop Infrastructure (Common)

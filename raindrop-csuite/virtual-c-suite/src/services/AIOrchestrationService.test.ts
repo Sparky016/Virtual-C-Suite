@@ -1,7 +1,7 @@
 // AIOrchestrationService Tests - AI orchestration and retry logic validation
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { AIOrchestrationService } from './AIOrchestrationService';
-import * as analytics from '../shared/analytics';
+import * as analytics from '../analytics/analytics';
 import * as retryLogic from '../shared/retry-logic';
 
 // Mock dependencies

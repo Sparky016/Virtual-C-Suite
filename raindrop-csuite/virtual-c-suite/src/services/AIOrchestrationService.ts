@@ -1,7 +1,7 @@
 // AI Orchestration Service - Manages parallel AI analysis
 import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt } from '../shared/prompts';
 import { retryAICall, RetryResult } from '../shared/retry-logic';
-import { trackAIPerformance, trackEvent, AnalyticsEvents } from '../shared/analytics';
+import { trackAIPerformance, trackEvent, AnalyticsEvents } from '../analytics/analytics';
 
 export interface AIAnalysisRequest {
   fileContent: string;
