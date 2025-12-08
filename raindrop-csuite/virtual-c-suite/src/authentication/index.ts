@@ -12,6 +12,17 @@ import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
 
+// Simple in-memory mock KV cache for local development
+const mockKvCache = {
+    cache: new Map<string, any>(),
+    async get<T>(key: string): Promise<T | null> {
+        return this.cache.get(key) || null;
+    },
+    async put(key: string, value: any, options?: { expirationTtl?: number }): Promise<void> {
+        this.cache.set(key, value);
+    }
+};
+
 // Load environment variables from .env file
 config();
 
@@ -61,7 +72,9 @@ app.post('/auth/login', async (c) => {
         }
 
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const authService = new AuthService(logger);
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const kvCache = (c.env as any).mem || mockKvCache;
+        const authService = new AuthService(projectId, kvCache, logger);
 
         // Verify the ID token first
         await authService.verifyIdToken(idToken);
@@ -91,7 +104,9 @@ app.get('/auth/user', async (c) => {
         }
 
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const authService = new AuthService(logger);
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const kvCache = (c.env as any).mem || mockKvCache;
+        const authService = new AuthService(projectId, kvCache, logger);
 
         // Verify session cookie
         const decodedClaims = await authService.verifySessionCookie(sessionCookie);
@@ -130,7 +145,9 @@ app.get('/auth/logout', async (c) => {
 
     if (sessionCookie) {
         try {
-            const authService = new AuthService(logger);
+            const projectId = process.env.FIREBASE_PROJECT_ID || '';
+            const kvCache = (c.env as any).mem || mockKvCache;
+            const authService = new AuthService(projectId, kvCache, logger);
             const decodedClaims = await authService.verifySessionCookie(sessionCookie);
             await authService.revokeRefreshTokens(decodedClaims.uid);
             logger.info(`User ${decodedClaims.uid} logged out`);

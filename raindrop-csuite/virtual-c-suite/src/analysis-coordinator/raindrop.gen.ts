@@ -8,6 +8,7 @@ export interface Env {
   AI: Ai;
   annotation: Annotation<Omit<MRNObject, 'type' | 'applicationName' | 'versionId'>>;
   AUTH_API: ServiceStub<import('../auth-api/index.js').default>;
+  FIREBASE_PROJECT_ID: string;
   INPUT_BUCKET: Bucket;
   logger: Logger;
   mem: KvCache;

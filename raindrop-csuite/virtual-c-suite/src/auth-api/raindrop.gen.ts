@@ -8,6 +8,7 @@ export interface Env {
   AI: Ai;
   ANALYSIS_COORDINATOR: ServiceStub<import('../analysis-coordinator/index.js').default>;
   annotation: Annotation<Omit<MRNObject, 'type' | 'applicationName' | 'versionId'>>;
+  FIREBASE_PROJECT_ID: string;
   INPUT_BUCKET: Bucket;
   logger: Logger;
   mem: KvCache;

@@ -5,6 +5,17 @@ import { SESSION_COOKIE_NAME, COOKIE_OPTIONS, CLEAR_COOKIE_OPTIONS } from '../sh
 import { decodeJwt } from 'jose';
 import { getCookie, setCookie } from 'hono/cookie';
 
+// Simple in-memory mock KV cache for local development
+const mockKvCache = {
+    cache: new Map<string, any>(),
+    async get<T>(key: string): Promise<T | null> {
+        return this.cache.get(key) || null;
+    },
+    async put(key: string, value: any, options?: { expirationTtl?: number }): Promise<void> {
+        this.cache.set(key, value);
+    }
+};
+
 /**
  * Secure authentication middleware using HTTP-only cookies
  *
@@ -26,7 +37,9 @@ export const authMiddleware = async (c: Context, next: Next) => {
         }
 
         try {
-            const authService = new AuthService(logger);
+            const projectId = process.env.FIREBASE_PROJECT_ID || '';
+            const kvCache = (c.env as any).mem || mockKvCache;
+            const authService = new AuthService(projectId, kvCache, logger);
 
             // Verify session cookie
             const decodedClaims = await authService.verifySessionCookie(sessionCookie);

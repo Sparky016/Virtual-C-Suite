@@ -38,7 +38,8 @@ export const verify = async (request: Request, env: any) => {
         }
 
         const logger = new LoggerService(env.POSTHOG_API_KEY);
-        const authService = new AuthService(logger);
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const authService = new AuthService(projectId, env.mem, logger);
 
         // Verify session cookie
         const decodedClaims = await authService.verifySessionCookie(sessionCookie);

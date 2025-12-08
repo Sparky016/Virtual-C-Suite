@@ -1,5 +1,9 @@
 application "virtual-c-suite" {
 
+  env "FIREBASE_PROJECT_ID" {
+    secret = false
+  }
+
   service "upload-api" {
     visibility = "public"
   }

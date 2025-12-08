@@ -3,31 +3,11 @@ import { AuthService } from '../services/AuthService';
 import { LoggerService } from '../services/LoggerService';
 import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
-import { serve } from '@hono/node-server';
-import { config } from 'dotenv';
 import { cors } from '../_app/cors';
 import { COOKIE_OPTIONS, SESSION_COOKIE_NAME, CLEAR_COOKIE_OPTIONS } from '../shared/cookie-config';
-import { decodeJwt } from 'jose';
 import { getCookie, setCookie } from 'hono/cookie';
 
-// Load environment variables from .env file
-config();
-
 const app = createHonoApp();
-
-if (process.env.START_LOCAL_SERVER === 'true') {
-    const port = parseInt(process.env.PORT || '3003');
-    console.log(`Auth Server is running on port ${port}`);
-
-    const env = {
-        ...process.env,
-    };
-
-    serve({
-        fetch: (request) => app.fetch(request, env),
-        port
-    });
-}
 
 // Health check endpoint
 app.get('/health', (c) => {
@@ -36,61 +16,56 @@ app.get('/health', (c) => {
 
 app.post('/auth/exchange', async (c) => {
     try {
-        const { code } = await c.req.json();
+        const { idToken } = await c.req.json();
 
         // Input validation
-        if (!code || typeof code !== 'string' || code.trim().length === 0) {
-            return c.json({ error: 'Authorization code is required' }, 400);
-        }
-
-        // Validate code format (basic alphanumeric + common OAuth chars)
-        if (!/^[A-Za-z0-9_-]+$/.test(code)) {
-            return c.json({ error: 'Invalid code format' }, 400);
+        if (!idToken || typeof idToken !== 'string' || idToken.trim().length === 0) {
+            return c.json({ error: 'ID token is required' }, 400);
         }
 
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const authService = new AuthService(c.env.WORKOS_API_KEY!, c.env.WORKOS_CLIENT_ID!, logger);
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const authService = new AuthService(projectId, c.env.mem, logger);
 
-        const authResponse = await authService.authenticateWithCode(code);
+        // Verify the ID token
+        const decodedToken = await authService.verifyIdToken(idToken);
 
-        // Decode access token to get actual expiry
-        const decoded = decodeJwt(authResponse.accessToken);
-        const expiresIn = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 1800; // Default 30 min
+        // Create session cookie (14 days)
+        const expiresIn = 60 * 60 * 24 * 14 * 1000; // 14 days in milliseconds
+        const sessionCookie = await authService.createSessionCookie(idToken, expiresIn);
+
+        // Get user details
+        const userRecord = await authService.getUser(decodedToken.uid);
 
         // Store session in secure HTTP-only cookie
-        // We'll store the tokens as a JSON string for now (in production, consider encrypting)
-        const sessionData = {
-            accessToken: authResponse.accessToken,
-            refreshToken: authResponse.refreshToken,
-            user: authResponse.user,
-        };
-
-        setCookie(c, SESSION_COOKIE_NAME, JSON.stringify(sessionData), COOKIE_OPTIONS);
-
-        // TODO: Store user in your database if needed
-        // TODO: Implement refresh token hashing and storage
+        setCookie(c, SESSION_COOKIE_NAME, sessionCookie, COOKIE_OPTIONS);
 
         return c.json({
             success: true,
-            user: authResponse.user,
-            expiresIn,
+            user: {
+                uid: userRecord.uid,
+                email: userRecord.email,
+                displayName: userRecord.displayName,
+                photoURL: userRecord.photoURL,
+            },
+            expiresIn: expiresIn / 1000, // Return in seconds
         });
 
     } catch (error: any) {
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
 
-        // Handle specific WorkOS error types
-        if (error.code === 'email_verification_required') {
+        // Handle specific Firebase error types
+        if (error.code === 'auth/email-not-verified') {
             return c.json({
                 error: 'EMAIL_VERIFICATION_REQUIRED',
                 message: 'Please verify your email before signing in'
             }, 401);
         }
 
-        if (error.code === 'invalid_grant') {
+        if (error.code === 'auth/invalid-id-token' || error.code === 'auth/argument-error') {
             return c.json({
-                error: 'INVALID_CODE',
-                message: 'Authorization code is invalid or expired'
+                error: 'INVALID_TOKEN',
+                message: 'ID token is invalid or expired'
             }, 401);
         }
 
@@ -112,25 +87,32 @@ app.get('/auth/user', async (c) => {
             return c.json({ error: 'No session found' }, 401);
         }
 
-        // Parse session data
-        const sessionData = JSON.parse(sessionCookie);
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const authService = new AuthService(c.env.WORKOS_API_KEY!, c.env.WORKOS_CLIENT_ID!, logger);
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const authService = new AuthService(projectId, c.env.mem, logger);
 
-        // Verify token is still valid by fetching user
-        const user = await authService.getUser(sessionData.accessToken);
+        // Verify session cookie and get decoded claims
+        const decodedClaims = await authService.verifySessionCookie(sessionCookie);
 
-        return c.json(user);
+        // Get user details
+        const userRecord = await authService.getUser(decodedClaims.uid);
+
+        return c.json({
+            uid: userRecord.uid,
+            email: userRecord.email,
+            displayName: userRecord.displayName,
+            photoURL: userRecord.photoURL,
+        });
 
     } catch (error: any) {
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
 
         // Check if token expired
-        if (error.message?.includes('expired') || error.code === 'token_expired') {
-            logger.info('Access token expired, refresh needed');
+        if (error.code === 'auth/session-cookie-expired' || error.code === 'auth/session-cookie-revoked') {
+            logger.info('Session cookie expired or revoked');
             return c.json({
                 error: 'TOKEN_EXPIRED',
-                message: 'Session expired. Please refresh your token.'
+                message: 'Session expired. Please sign in again.'
             }, 401);
         }
 
@@ -145,69 +127,63 @@ app.get('/auth/user', async (c) => {
 
 app.post('/auth/refresh', async (c) => {
     try {
-        // Get refresh token from cookie session
-        const sessionCookie = getCookie(c, SESSION_COOKIE_NAME);
+        const { idToken } = await c.req.json();
 
-        if (!sessionCookie) {
-            return c.json({ error: 'No session found' }, 401);
-        }
-
-        const sessionData = JSON.parse(sessionCookie);
-
-        if (!sessionData.refreshToken) {
-            return c.json({ error: 'No refresh token in session' }, 401);
+        if (!idToken) {
+            return c.json({ error: 'ID token is required' }, 401);
         }
 
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const authService = new AuthService(c.env.WORKOS_API_KEY!, c.env.WORKOS_CLIENT_ID!, logger);
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const authService = new AuthService(projectId, c.env.mem, logger);
 
-        logger.info('Refreshing access token');
+        logger.info('Refreshing session');
 
-        // Exchange refresh token for new tokens (WorkOS rotates refresh tokens automatically)
-        const authResponse = await authService.authenticateWithRefreshToken(sessionData.refreshToken);
+        // Verify the new ID token
+        const decodedToken = await authService.verifyIdToken(idToken);
 
-        // Decode new access token to get actual expiry
-        const decoded = decodeJwt(authResponse.accessToken);
-        const expiresIn = decoded.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 1800;
+        // Create new session cookie (14 days)
+        const expiresIn = 60 * 60 * 24 * 14 * 1000; // 14 days in milliseconds
+        const sessionCookie = await authService.createSessionCookie(idToken, expiresIn);
 
-        // Update session cookie with new tokens (token rotation)
-        const newSessionData = {
-            accessToken: authResponse.accessToken,
-            refreshToken: authResponse.refreshToken, // New refresh token from WorkOS
-            user: authResponse.user,
-        };
+        // Get user details
+        const userRecord = await authService.getUser(decodedToken.uid);
 
-        setCookie(c, SESSION_COOKIE_NAME, JSON.stringify(newSessionData), COOKIE_OPTIONS);
+        // Update session cookie
+        setCookie(c, SESSION_COOKIE_NAME, sessionCookie, COOKIE_OPTIONS);
 
-        // TODO: If storing refresh tokens in DB, invalidate old token and store new one
-
-        logger.info('Token refresh successful');
+        logger.info('Session refresh successful');
 
         return c.json({
             success: true,
-            expiresIn,
-            user: authResponse.user,
+            expiresIn: expiresIn / 1000,
+            user: {
+                uid: userRecord.uid,
+                email: userRecord.email,
+                displayName: userRecord.displayName,
+                photoURL: userRecord.photoURL,
+            },
         });
 
     } catch (error: any) {
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
 
         // Handle specific errors
-        if (error.code === 'invalid_grant') {
-            logger.warn('Refresh token invalid or expired');
+        if (error.code === 'auth/invalid-id-token' || error.code === 'auth/argument-error') {
+            logger.warn('ID token invalid or expired');
             // Clear invalid session
             setCookie(c, SESSION_COOKIE_NAME, '', CLEAR_COOKIE_OPTIONS);
             return c.json({
-                error: 'INVALID_REFRESH_TOKEN',
-                message: 'Refresh token is invalid or expired. Please sign in again.'
+                error: 'INVALID_TOKEN',
+                message: 'ID token is invalid or expired. Please sign in again.'
             }, 401);
         }
 
-        logger.error('Token refresh failed', error);
+        logger.error('Session refresh failed', error);
 
         return c.json({
             error: 'REFRESH_FAILED',
-            message: 'Failed to refresh token. Please try again.'
+            message: 'Failed to refresh session. Please try again.'
         }, 401);
     }
 });
@@ -222,36 +198,23 @@ app.post('/auth/logout', async (c) => {
             return c.json({ success: true });
         }
 
-        // Parse session to get access token
-        const sessionData = JSON.parse(sessionCookie);
-        const accessToken = sessionData.accessToken;
+        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const authService = new AuthService(projectId, c.env.mem, logger);
 
-        // Decode JWT to get session ID (sid claim)
-        const decoded = decodeJwt(accessToken);
-        const sessionId = decoded.sid as string;
+        // Verify session cookie to get user ID
+        const decodedClaims = await authService.verifySessionCookie(sessionCookie);
 
-        if (sessionId) {
-            // Create WorkOS client and get logout URL
-            const authService = new AuthService(c.env.WORKOS_API_KEY!, c.env.WORKOS_CLIENT_ID!, logger);
-            const logoutUrl = authService.getLogoutUrl(sessionId);
+        logger.info('User logging out', { uid: decodedClaims.uid });
 
-            logger.info('User logging out', { sessionId });
+        // Revoke all refresh tokens for this user
+        await authService.revokeRefreshTokens(decodedClaims.uid);
 
-            // Clear session cookie
-            setCookie(c, SESSION_COOKIE_NAME, '', CLEAR_COOKIE_OPTIONS);
+        // Clear session cookie
+        setCookie(c, SESSION_COOKIE_NAME, '', CLEAR_COOKIE_OPTIONS);
 
-            // TODO: If storing refresh tokens in DB, revoke them here
-
-            return c.json({
-                success: true,
-                logoutUrl, // Client should redirect to this URL
-            });
-        } else {
-            logger.warn('No session ID found in token');
-            // Clear cookie anyway
-            setCookie(c, SESSION_COOKIE_NAME, '', CLEAR_COOKIE_OPTIONS);
-            return c.json({ success: true });
-        }
+        return c.json({
+            success: true,
+        });
 
     } catch (error: any) {
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);

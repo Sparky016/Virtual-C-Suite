@@ -1,37 +1,47 @@
-import * as admin from 'firebase-admin';
+import { Auth, type FirebaseIdToken } from 'firebase-auth-cloudflare-workers';
+import type { UserRecord } from 'firebase-auth-cloudflare-workers/dist/main/user-record';
 import { LoggerService } from './LoggerService';
+import type { KvCache } from '@liquidmetal-ai/raindrop-framework';
 
-// Re-export or define types if needed by consumers
-export type DecodedIdToken = admin.auth.DecodedIdToken;
-export type UserRecord = admin.auth.UserRecord;
+// Re-export types for convenience
+export type { FirebaseIdToken, UserRecord };
 
 export class AuthService {
     private logger: LoggerService;
-    private auth: admin.auth.Auth;
+    private auth: Auth;
 
-    constructor(logger: LoggerService) {
+    constructor(projectId: string, kvCache: KvCache, logger: LoggerService) {
         this.logger = logger;
 
-        if (!admin.apps.length) {
-            try {
-                // Initialize Firebase Admin SDK
-                // In production, this might use GOOGLE_APPLICATION_CREDENTIALS automatically
-                // For local dev, we might need specific config if not set in env
-                admin.initializeApp();
-                this.logger.info('Firebase Admin initialized');
-            } catch (error) {
-                this.logger.error('Failed to initialize Firebase Admin', error);
-                throw error;
+        // Create a KV store adapter for caching public keys
+        const keyStore = {
+            get: async <ExpectedValue = unknown>(): Promise<ExpectedValue | null> => {
+                try {
+                    const value = await kvCache.get<ExpectedValue>('firebase-public-jwk');
+                    return value;
+                } catch (error) {
+                    this.logger.error('Error getting public JWK from cache:', error);
+                    return null;
+                }
+            },
+            put: async (value: string, expirationTtl: number): Promise<void> => {
+                try {
+                    await kvCache.put('firebase-public-jwk', value, { expirationTtl });
+                } catch (error) {
+                    this.logger.error('Error putting public JWK to cache:', error);
+                }
             }
-        }
+        };
 
-        this.auth = admin.auth();
+        // Initialize Firebase Auth for Cloudflare Workers
+        this.auth = Auth.getOrInitialize(projectId, keyStore);
+        this.logger.info('Firebase Auth initialized for Cloudflare Workers');
     }
 
     /**
      * Verifies the ID token sent from the client
      */
-    async verifyIdToken(idToken: string): Promise<DecodedIdToken> {
+    async verifyIdToken(idToken: string): Promise<FirebaseIdToken> {
         try {
             const decodedToken = await this.auth.verifyIdToken(idToken);
             return decodedToken;
@@ -43,10 +53,13 @@ export class AuthService {
 
     /**
      * Creates a session cookie from an ID token
+     * Note: This requires service account credentials to be configured
      */
     async createSessionCookie(idToken: string, expiresIn: number): Promise<string> {
         try {
-            const sessionCookie = await this.auth.createSessionCookie(idToken, { expiresIn });
+            const sessionCookie = await this.auth.createSessionCookie(idToken, {
+                expiresIn: expiresIn / 1000 // Convert milliseconds to seconds
+            });
             return sessionCookie;
         } catch (error) {
             this.logger.error('Error creating session cookie:', error);
@@ -57,9 +70,9 @@ export class AuthService {
     /**
      * Verifies a session cookie
      */
-    async verifySessionCookie(sessionCookie: string): Promise<DecodedIdToken> {
+    async verifySessionCookie(sessionCookie: string): Promise<FirebaseIdToken> {
         try {
-            // checkForRevocation: true enforces that revoked sessions are rejected
+            // checkRevoked: true enforces that revoked sessions are rejected
             const decodedClaims = await this.auth.verifySessionCookie(sessionCookie, true);
             return decodedClaims;
         } catch (error) {
