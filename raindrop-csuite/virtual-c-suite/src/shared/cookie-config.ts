@@ -11,12 +11,12 @@
 export const COOKIE_OPTIONS = {
     httpOnly: true,      // Prevents JavaScript access via document.cookie
     secure: process.env.NODE_ENV === 'production',  // HTTPS only in production
-    sameSite: 'strict' as const,  // Strict CSRF protection
+    sameSite: 'Lax' as const,  // Lax is recommended for general auth flows
     path: '/',           // Cookie available for entire domain
-    maxAge: 1800000,     // 30 minutes (matches recommended access token duration)
+    maxAge: 432000,      // 5 days in seconds (matches session cookie duration)
 };
 
-export const SESSION_COOKIE_NAME = 'wos-session';
+export const SESSION_COOKIE_NAME = 'session';
 
 /**
  * Cookie options for clearing/expiring cookies

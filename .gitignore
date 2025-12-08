@@ -37,3 +37,5 @@ coverage/
 
 nul
 */nul
+.agent/*
+raindrop-csuite/virtual-c-suite/service-account.json
