@@ -1,5 +1,5 @@
 // Logger Service - Centralizes all logging and analytics tracking
-import { trackEvent, trackAIPerformance, AnalyticsEvents } from '../analytics/analytics';
+import { trackEvent, trackAIPerformance, AnalyticsEvents } from '../../analytics/analytics';
 
 export class LoggerService {
   private posthogKey?: string;

@@ -5,7 +5,7 @@ import { logger } from 'hono/logger';
 import { BucketListOptions } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { StorageService } from '../services/StorageService';
-import { CacheService } from '../services/CacheService';
+import { CacheService } from '../services/Cache/CacheService';
 
 // Create Hono app with middleware
 export const app = new Hono<{ Bindings: Env }>();

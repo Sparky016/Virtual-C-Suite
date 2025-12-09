@@ -6,7 +6,7 @@ import { AppBindings } from '../config/env';
 let posthogClient: PostHog | null = null;
 
 // PostHog Configuration
-const POSTHOG_HOST = 'https://us.i.posthog.com';
+const posthogHost = process.env.POSTHOG_HOST;
 
 /**
  * Initialize PostHog client (lazy initialization)
@@ -19,12 +19,12 @@ function getPostHogClient(apiKey?: string): PostHog | null {
 
   if (!posthogClient) {
     posthogClient = new PostHog(apiKey, {
-      host: POSTHOG_HOST,
+      host: posthogHost,
       enableExceptionAutocapture: true,
       flushAt: 1, // Flush immediately for development/testing
       flushInterval: 0 // Flush immediately
     });
-    console.log(`PostHog analytics initialized with host: ${POSTHOG_HOST}`);
+    console.log(`PostHog analytics initialized with host: ${posthogHost}`);
   }
 
   return posthogClient;

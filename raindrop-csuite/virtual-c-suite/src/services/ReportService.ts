@@ -1,6 +1,6 @@
 // Report Service - Handles report retrieval and validation
-import { DatabaseService, AnalysisRequest, FinalReport } from './DatabaseService';
-import { LoggerService } from './LoggerService';
+import { DatabaseService, AnalysisRequest, FinalReport } from './Database/DatabaseService';
+import { LoggerService } from './Logger/LoggerService';
 
 export interface ReportResult {
   requestId: string;

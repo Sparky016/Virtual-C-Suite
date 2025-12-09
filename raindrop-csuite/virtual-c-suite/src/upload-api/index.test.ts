@@ -66,7 +66,7 @@ vi.mock('../services/ReportService', () => ({
   ReportService: vi.fn(() => mockReportService)
 }));
 
-vi.mock('../services/LoggerService', () => ({
+vi.mock('../services/Logger/LoggerService', () => ({
   LoggerService: vi.fn(() => mockLoggerService)
 }));
 

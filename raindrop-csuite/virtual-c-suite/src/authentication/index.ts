@@ -1,7 +1,7 @@
 import { AppBindings } from '../config/env';
 import { Env } from '../upload-api/raindrop.gen';
-import { AuthService } from '../services/AuthService';
-import { LoggerService } from '../services/LoggerService';
+import { AuthService } from '../services/authentication/AuthService';
+import { LoggerService } from '../services/Logger/LoggerService';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { serve } from '@hono/node-server';
 import { config } from 'dotenv';

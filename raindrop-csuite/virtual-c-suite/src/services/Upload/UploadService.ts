@@ -1,7 +1,7 @@
 // Upload Service - Business logic for file uploads
 import { BucketPutOptions } from '@liquidmetal-ai/raindrop-framework';
-import { FileValidationService } from './FileValidationService';
-import { LoggerService } from './LoggerService';
+import { FileValidationService } from '../FileValidationService';
+import { LoggerService } from '../Logger/LoggerService';
 
 export interface UploadRequest {
   file: File;
@@ -29,18 +29,26 @@ export class UploadService {
   /**
    * Generate a unique request ID (ULID-like)
    */
+  /**
+   * Generate a unique request ID (ULID-like)
+   */
   generateRequestId(): string {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 15);
-    return `${timestamp}${random}`.toUpperCase();
+    const id = `${timestamp}${random}`.toUpperCase();
+    this.logger.info(`Generated request ID: ${id}`);
+    return id;
   }
 
   /**
    * Validate upload request
    */
   async validateUploadRequest(file: File | null, userId: string | null): Promise<UploadResult> {
+    this.logger.info('Validating upload request', { userId, fileName: file?.name, fileType: file?.type });
+
     // Check required fields
     if (!file) {
+      this.logger.warn('Validation failed: No file provided');
       return {
         success: false,
         error: 'No file provided'
@@ -48,6 +56,7 @@ export class UploadService {
     }
 
     if (!userId) {
+      this.logger.warn('Validation failed: userId is required');
       return {
         success: false,
         error: 'userId is required'
@@ -57,6 +66,7 @@ export class UploadService {
     // Validate file
     const validationResult = this.validationService.validateFile(file);
     if (!validationResult.isValid) {
+      this.logger.warn('Validation failed', { error: validationResult.error, details: validationResult.details });
       return {
         success: false,
         error: validationResult.error,
@@ -64,6 +74,7 @@ export class UploadService {
       };
     }
 
+    this.logger.info('Upload request validated successfully');
     return { success: true };
   }
 
@@ -71,6 +82,7 @@ export class UploadService {
    * Prepare file metadata for bucket storage
    */
   prepareFileMetadata(request: UploadRequest, file: File): BucketPutOptions {
+    this.logger.info(`Preparing file metadata for request: ${request.requestId}`);
     return {
       httpMetadata: {
         contentType: file.type || 'application/octet-stream',
@@ -88,7 +100,9 @@ export class UploadService {
    * Build file storage key
    */
   buildFileKey(userId: string, requestId: string, filename: string): string {
-    return `${userId}/${requestId}/${filename}`;
+    const key = `${userId}/${requestId}/${filename}`;
+    this.logger.info(`Built file key: ${key}`);
+    return key;
   }
 
   /**
@@ -100,6 +114,7 @@ export class UploadService {
     file: File,
     fileKey: string
   ): void {
+    this.logger.info(`Tracking upload success for request: ${requestId}`);
     const fileSizeMB = this.validationService.getFileSizeMB(file);
 
     this.logger.trackFileUploaded(
@@ -116,6 +131,7 @@ export class UploadService {
    * Track validation success
    */
   trackValidationSuccess(userId: string, file: File): void {
+    this.logger.info(`Tracking validation success for file: ${file.name}`);
     const fileSizeMB = this.validationService.getFileSizeMB(file);
 
     this.logger.trackFileValidated(
@@ -135,6 +151,7 @@ export class UploadService {
     reason: string,
     details: any
   ): void {
+    this.logger.info(`Tracking validation failure for file: ${file.name}`, { reason });
     this.logger.trackFileValidationFailed(userId, reason, {
       file_name: file.name,
       file_type: file.type,

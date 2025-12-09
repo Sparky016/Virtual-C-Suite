@@ -1,6 +1,6 @@
 // Status Service - Handles status checking, timeout logic, and progress tracking
-import { DatabaseService, AnalysisRequest, ProgressInfo } from './DatabaseService';
-import { LoggerService } from './LoggerService';
+import { DatabaseService, AnalysisRequest, ProgressInfo } from './Database/DatabaseService';
+import { LoggerService } from './Logger/LoggerService';
 
 export interface StatusCheckResult {
   requestId: string;

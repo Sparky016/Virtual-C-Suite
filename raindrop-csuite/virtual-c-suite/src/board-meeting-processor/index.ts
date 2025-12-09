@@ -6,7 +6,8 @@ import {
 import { Env } from './raindrop.gen';
 import { formatFinalReport } from '../shared/prompts';
 import { trackEvent, AnalyticsEvents } from '../analytics/analytics';
-import { DatabaseService } from '../services/DatabaseService';
+import { DatabaseService } from '../services/Database/DatabaseService';
+import { LoggerService } from '../services/Logger/LoggerService';
 import { StorageService } from '../services/StorageService';
 import { AIOrchestrationService } from '../services/AIOrchestrationService';
 
@@ -40,7 +41,8 @@ export default class extends Each<BucketEventNotification, Env> {
     // Initialize Services
     const inputStorage = new StorageService(this.env.INPUT_BUCKET);
     const outputStorage = new StorageService(this.env.OUTPUT_BUCKET);
-    const dbService = new DatabaseService(this.env.TRACKING_DB);
+    const logger = new LoggerService((this.env as ProcessorEnv).POSTHOG_API_KEY);
+    const dbService = new DatabaseService(this.env.TRACKING_DB, logger);
     const aiService = new AIOrchestrationService(this.env.AI, (this.env as ProcessorEnv).POSTHOG_API_KEY);
 
     try {
