@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StatusService } from './StatusService';
-import { DatabaseService, AnalysisRequest } from './DatabaseService';
-import { LoggerService } from './LoggerService';
+import { DatabaseService, AnalysisRequest } from './Database/DatabaseService';
+import { LoggerService } from './Logger/LoggerService';
 
 // Mock the analytics module
 vi.mock('../shared/analytics', () => ({

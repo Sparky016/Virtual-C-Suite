@@ -1,8 +1,9 @@
 import { requireAuthenticated, verifyIssuer } from '@liquidmetal-ai/raindrop-framework/core/auth';
-import { AuthService } from '../services/AuthService';
-import { LoggerService } from '../services/LoggerService';
+import { AuthService } from '../services/authentication/AuthService';
+
 import { SESSION_COOKIE_NAME } from '../shared/cookie-config';
 import * as cookie from 'cookie';
+import { LoggerService } from '../services/Logger/LoggerService';
 
 /**
  * verify is the application-wide JWT verification hook.
@@ -23,10 +24,16 @@ import * as cookie from 'cookie';
  * Verifies JWT against configured OIDC provider (e.g., WorkOS).
  */
 export const verify = async (request: Request, env: any) => {
+    // Initialize logger early to capture all events
+    const logger = new LoggerService(env.POSTHOG_API_KEY);
+
     try {
+        logger.info('Starting auth verification');
+
         // Parse cookies from header
         const cookieHeader = request.headers.get('Cookie');
         if (!cookieHeader) {
+            logger.info('Auth verification failed: No cookie header present');
             return false;
         }
 
@@ -34,23 +41,28 @@ export const verify = async (request: Request, env: any) => {
         const sessionCookie = cookies[SESSION_COOKIE_NAME];
 
         if (!sessionCookie) {
+            logger.info('Auth verification failed: Session cookie not found', {
+                cookieName: SESSION_COOKIE_NAME,
+                availableCookies: Object.keys(cookies)
+            });
             return false;
         }
 
-        const logger = new LoggerService(env.POSTHOG_API_KEY);
         const projectId = process.env.FIREBASE_PROJECT_ID || '';
         const authService = new AuthService(projectId, env.mem, logger);
 
         // Verify session cookie
+        logger.info('Verifying session cookie');
         const decodedClaims = await authService.verifySessionCookie(sessionCookie);
 
         // Add user info to env for downstream use
         env.user = decodedClaims;
 
+        logger.info('Auth verification successful', { uid: decodedClaims.uid });
         return true;
 
     } catch (error) {
-        console.error('Auth verification failed', error);
+        logger.error('Auth verification failed with error', error);
         return false;
     }
 };

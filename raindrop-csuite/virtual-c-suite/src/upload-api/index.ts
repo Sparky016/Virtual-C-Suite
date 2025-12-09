@@ -1,11 +1,11 @@
 import { AppBindings } from '../config/env';
 import { Env } from './raindrop.gen';
 import { RateLimiter, getRateLimitHeaders } from '../shared/rate-limiter';
-import { UploadService } from '../services/UploadService';
-import { DatabaseService } from '../services/DatabaseService';
+import { UploadService } from '../services/Upload/UploadService';
+import { DatabaseService } from '../services/Database/DatabaseService';
 import { StatusService } from '../services/StatusService';
 import { ReportService } from '../services/ReportService';
-import { LoggerService } from '../services/LoggerService';
+import { LoggerService } from '../services/Logger/LoggerService';
 import { StorageService } from '../services/StorageService';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { Hono } from 'hono';
@@ -45,7 +45,8 @@ app.post('/upload', async (c) => {
 
     // Initialize services for this request
     const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
-    const databaseService = new DatabaseService(c.env.TRACKING_DB);
+    const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+    const databaseService = new DatabaseService(c.env.TRACKING_DB, logger);
     const uploadService = new UploadService(loggerService);
     const storageService = new StorageService(c.env.INPUT_BUCKET);
 
@@ -149,7 +150,8 @@ app.get('/status/:requestId', async (c) => {
 
     // Initialize services
     const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
-    const databaseService = new DatabaseService(c.env.TRACKING_DB);
+    const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+    const databaseService = new DatabaseService(c.env.TRACKING_DB, logger);
     const statusService = new StatusService(databaseService, loggerService);
 
     // Check status using service
@@ -200,7 +202,8 @@ app.get('/reports/:requestId', async (c) => {
 
     // Initialize services
     const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
-    const databaseService = new DatabaseService(c.env.TRACKING_DB);
+    const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+    const databaseService = new DatabaseService(c.env.TRACKING_DB, logger);
     const reportService = new ReportService(databaseService, loggerService);
 
     // Get report using service

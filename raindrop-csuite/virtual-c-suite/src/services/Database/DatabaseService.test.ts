@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, Mock } from 'vitest';
 import { DatabaseService, AnalysisRequest, ExecutiveAnalysis } from './DatabaseService';
+import { LoggerService } from '../Logger/LoggerService';
 
 // Mock D1Database
 const createMockDb = () => {
@@ -29,10 +30,30 @@ const createMockDb = () => {
 };
 
 describe('DatabaseService', () => {
+  let mockLogger: LoggerService;
+
+  beforeEach(() => {
+    mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackEvent: vi.fn(),
+      trackAIPerformance: vi.fn(),
+      trackRateLimitCheck: vi.fn(),
+      trackRateLimitExceeded: vi.fn(),
+      trackFileValidated: vi.fn(),
+      trackFileValidationFailed: vi.fn(),
+      trackFileUploaded: vi.fn(),
+      trackFileUploadFailed: vi.fn(),
+      trackStatusChecked: vi.fn(),
+      trackReportRetrieved: vi.fn()
+    } as unknown as LoggerService;
+  });
+
   describe('createAnalysisRequest', () => {
     it('should insert a new analysis request with correct parameters', async () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       await service.createAnalysisRequest('req-123', 'user-456', 'file/path/key.csv', 'processing');
 
@@ -51,7 +72,7 @@ describe('DatabaseService', () => {
 
     it('should default status to processing if not provided', async () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       await service.createAnalysisRequest('req-123', 'user-456', 'file/path/key.csv');
 
@@ -78,7 +99,7 @@ describe('DatabaseService', () => {
 
       mockDb.mockFirst.mockResolvedValue(mockRequest);
 
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
       const result = await service.getAnalysisRequest('req-123');
 
       expect(mockDb.prepare).toHaveBeenCalledWith(
@@ -92,7 +113,7 @@ describe('DatabaseService', () => {
       const mockDb = createMockDb();
       mockDb.mockFirst.mockResolvedValue(null);
 
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
       const result = await service.getAnalysisRequest('non-existent');
 
       expect(result).toBeNull();
@@ -102,7 +123,7 @@ describe('DatabaseService', () => {
   describe('updateAnalysisRequestStatus', () => {
     it('should update status without error message', async () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       await service.updateAnalysisRequestStatus('req-123', 'completed');
 
@@ -118,7 +139,7 @@ describe('DatabaseService', () => {
 
     it('should update status with error message', async () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       await service.updateAnalysisRequestStatus('req-123', 'failed', 'Timeout exceeded', Date.now());
 
@@ -145,7 +166,7 @@ describe('DatabaseService', () => {
 
       mockDb.mockAll.mockResolvedValue({ results: mockAnalyses });
 
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
       const result = await service.getExecutiveAnalyses('req-123');
 
       expect(mockDb.prepare).toHaveBeenCalledWith(
@@ -159,7 +180,7 @@ describe('DatabaseService', () => {
       const mockDb = createMockDb();
       mockDb.mockAll.mockResolvedValue({ results: [] });
 
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
       const result = await service.getExecutiveAnalyses('req-123');
 
       expect(result).toEqual([]);
@@ -177,7 +198,7 @@ describe('DatabaseService', () => {
 
       mockDb.mockFirst.mockResolvedValue(mockReport);
 
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
       const result = await service.getFinalReport('req-123');
 
       expect(mockDb.prepare).toHaveBeenCalledWith(
@@ -191,7 +212,7 @@ describe('DatabaseService', () => {
       const mockDb = createMockDb();
       mockDb.mockFirst.mockResolvedValue(null);
 
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
       const result = await service.getFinalReport('non-existent');
 
       expect(result).toBeNull();
@@ -201,7 +222,7 @@ describe('DatabaseService', () => {
   describe('calculateProgress', () => {
     it('should calculate progress correctly with all analyses completed', () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       const analyses: ExecutiveAnalysis[] = [
         { executive_role: 'CFO', analysis_text: 'CFO analysis' },
@@ -221,7 +242,7 @@ describe('DatabaseService', () => {
 
     it('should calculate progress correctly with partial analyses', () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       const analyses: ExecutiveAnalysis[] = [
         { executive_role: 'CFO', analysis_text: 'CFO analysis' }
@@ -239,7 +260,7 @@ describe('DatabaseService', () => {
 
     it('should calculate progress correctly with no analyses', () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       const progress = service.calculateProgress([], 'processing');
 
@@ -254,7 +275,7 @@ describe('DatabaseService', () => {
   describe('createExecutiveAnalysis', () => {
     it('should create an executive analysis record', async () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       await service.createExecutiveAnalysis('req-123', 'CFO', 'analysis content', 1234567890);
 
@@ -274,7 +295,7 @@ describe('DatabaseService', () => {
   describe('createFinalReport', () => {
     it('should create a final report record', async () => {
       const mockDb = createMockDb();
-      const service = new DatabaseService(mockDb as any);
+      const service = new DatabaseService(mockDb as any, mockLogger);
 
       await service.createFinalReport('req-123', 'report content', 'key', 1234567890);
 

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as analytics from '../../analytics/analytics';
 import { LoggerService } from './LoggerService';
-import * as analytics from '../analytics/analytics';
 
 // Mock the analytics module
-vi.mock('../shared/analytics', () => ({
+vi.mock('../../analytics/analytics', () => ({
   trackEvent: vi.fn(),
   trackAIPerformance: vi.fn(),
   AnalyticsEvents: {

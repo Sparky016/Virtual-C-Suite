@@ -1,6 +1,6 @@
 import { Context, Next } from 'hono';
-import { AuthService } from '../services/AuthService';
-import { LoggerService } from '../services/LoggerService';
+import { AuthService } from '../services/authentication/AuthService';
+import { LoggerService } from '../services/Logger/LoggerService';
 import { SESSION_COOKIE_NAME, COOKIE_OPTIONS, CLEAR_COOKIE_OPTIONS } from '../shared/cookie-config';
 import { decodeJwt } from 'jose';
 import { getCookie, setCookie } from 'hono/cookie';

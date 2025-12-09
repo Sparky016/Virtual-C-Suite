@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from './LoggerService';
-import * as analytics from '../analytics/analytics';
+import * as analytics from '../../analytics/analytics';
 
 /**
  * Integration tests for LoggerService
