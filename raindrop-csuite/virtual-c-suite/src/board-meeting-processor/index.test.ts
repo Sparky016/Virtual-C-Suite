@@ -47,6 +47,12 @@ const mockAIOrchestrationService = {
   }),
 };
 
+const mockLoggerService = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+};
+
 vi.mock('../services/DatabaseService', () => {
   return {
     DatabaseService: vi.fn().mockImplementation(() => mockDatabaseService),
@@ -56,6 +62,12 @@ vi.mock('../services/DatabaseService', () => {
 vi.mock('../services/StorageService', () => {
   return {
     StorageService: vi.fn().mockImplementation(() => mockStorageService),
+  };
+});
+
+vi.mock('../services/Logger/LoggerService', () => {
+  return {
+    LoggerService: vi.fn().mockImplementation(() => mockLoggerService),
   };
 });
 

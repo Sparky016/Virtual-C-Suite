@@ -8,6 +8,7 @@ import { COOKIE_OPTIONS, SESSION_COOKIE_NAME, CLEAR_COOKIE_OPTIONS } from '../sh
 import { getCookie, setCookie } from 'hono/cookie';
 
 const app = createHonoApp();
+export { app };
 
 // Health check endpoint
 app.get('/health', (c) => {

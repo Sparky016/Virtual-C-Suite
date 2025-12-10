@@ -18,15 +18,14 @@ interface ProcessorEnv extends Env {
 export default class extends Each<BucketEventNotification, Env> {
   async process(message: Message<BucketEventNotification>): Promise<void> {
     const event = message.body;
+    // We can't use the service logger here easily without initializing it, 
+    // but the processor creates a fresh one for each file upload anyway.
+    // For the high level event logging, we might want to just keep console or init a temp logger.
+    // However, the instructions say "Replace all... in board-meeting-processor".
+    // Let's check if we can init a logger earlier or just rely on the one inside handleFileUpload.
 
-    console.log('Bucket event received:', {
-      action: event.action,
-      bucket: event.bucket,
-      objectKey: event.object.key,
-      size: event.object.size,
-      eventTime: event.eventTime,
-      timestamp: new Date().toISOString()
-    });
+    // Actually, looking at the code, handleFileUpload creates the logger. 
+    // The top level process logs the event.
 
     if (event.action === 'PutObject' || event.action === 'CompleteMultipartUpload') {
       await this.handleFileUpload(event);
@@ -46,22 +45,27 @@ export default class extends Each<BucketEventNotification, Env> {
     const aiService = new AIOrchestrationService(this.env.AI, (this.env as ProcessorEnv).POSTHOG_API_KEY);
 
     try {
-      console.log(`Processing uploaded file: ${event.object.key}`);
+      logger.info(`Processing uploaded file: ${event.object.key}`, {
+        action: event.action,
+        bucket: event.bucket,
+        size: event.object.size,
+        eventTime: event.eventTime
+      });
 
       // Extract request ID from object metadata or key
       const file = await inputStorage.get(event.object.key);
       if (!file) {
-        console.error('File not found in bucket:', event.object.key);
+        logger.error('File not found in bucket', { key: event.object.key });
         return;
       }
 
       requestId = file.customMetadata?.requestId as string;
       if (!requestId) {
-        console.error('No requestId in metadata');
+        logger.error('No requestId in metadata', { key: event.object.key });
         return;
       }
 
-      console.log(`Starting analysis for request: ${requestId}`);
+      logger.info(`Starting analysis for request: ${requestId}`);
 
       // Track analysis started
       const userId = file.customMetadata?.userId as string || 'unknown';
@@ -72,7 +76,7 @@ export default class extends Each<BucketEventNotification, Env> {
 
       // Read file content
       const fileContent = await file.text();
-      console.log(`File content length: ${fileContent.length} characters`);
+      logger.info(`File content read`, { length: fileContent.length });
 
       // Execute Executive Analyses (CFO, CMO, COO)
       const executives = await aiService.executeExecutiveAnalyses({ fileContent, requestId, userId });
@@ -113,7 +117,7 @@ export default class extends Each<BucketEventNotification, Env> {
       await dbService.updateAnalysisRequestStatus(requestId, 'completed', undefined, Date.now());
 
       const totalDuration = Date.now() - startTime;
-      console.log(`Total processing completed in ${totalDuration}ms for request ${requestId}`);
+      logger.info(`Processing completed`, { requestId, totalDuration });
 
       // Track report generation and analysis completion
       trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.REPORT_GENERATED, {
@@ -130,7 +134,7 @@ export default class extends Each<BucketEventNotification, Env> {
       });
 
     } catch (error) {
-      console.error('Error processing file:', error);
+      logger.error('Error processing file', error);
 
       // Update request status to failed
       if (requestId) {
