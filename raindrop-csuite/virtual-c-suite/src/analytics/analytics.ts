@@ -179,7 +179,7 @@ export async function shutdownAnalytics(apiKey: string | undefined): Promise<voi
 export function trackAIPerformance(
   apiKey: string | undefined,
   userId: string,
-  role: 'CFO' | 'CMO' | 'COO' | 'CEO',
+  role: 'CFO' | 'CMO' | 'COO' | 'CEO' | 'CEO_CHAT',
   durationMs: number,
   attempts: number,
   success: boolean,
