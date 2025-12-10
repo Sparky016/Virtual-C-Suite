@@ -171,6 +171,45 @@ export class AIOrchestrationService {
     }
   }
 
+  /**
+   * Execute CEO chat with memory
+   */
+  async executeCEOChat(
+    messages: { role: string; content: string }[],
+    requestId: string,
+    userId: string
+  ): Promise<RetryResult<any>> {
+    const systemPrompt = "You are the CEO of my company with my company's best interest at heart.";
+
+    const fullMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages
+    ];
+
+    const result = await retryAICall(
+      this.aiClient,
+      this.model,
+      {
+        model: this.model,
+        messages: fullMessages,
+        temperature: 0.7,
+        max_tokens: 1000
+      },
+      undefined,
+      'CEO Chat'
+    );
+
+    // Track CEO chat performance
+    if (this.posthogKey) {
+      trackAIPerformance(this.posthogKey, userId, 'CEO_CHAT', result.totalDuration, result.attempts, result.success, {
+        request_id: requestId,
+        message_count: messages.length
+      });
+    }
+
+    return result;
+  }
+
   // Private helper methods
 
   private async executeCFOAnalysis(fileContent: string): Promise<RetryResult<any>> {

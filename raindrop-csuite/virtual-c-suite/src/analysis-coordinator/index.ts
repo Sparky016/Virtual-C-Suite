@@ -6,6 +6,7 @@ import { BucketListOptions } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { StorageService } from '../services/StorageService';
 import { CacheService } from '../services/Cache/CacheService';
+import { AIOrchestrationService } from '../services/AIOrchestrationService';
 
 // Create Hono app with middleware
 export const app = new Hono<{ Bindings: Env }>();
@@ -161,6 +162,37 @@ app.post('/api/documents/chat', async (c) => {
     console.error('Chat error:', error);
     return c.json({
       error: 'Document chat failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// CEO Chat (Conversation with Memory)
+app.post('/api/ceo-chat', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { messages, requestId = 'chat-' + Date.now(), userId = 'anonymous' } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return c.json({ error: 'messages array is required' }, 400);
+    }
+
+    const aiService = new AIOrchestrationService(c.env.AI, (c.env as any).POSTHOG_API_KEY);
+    const response = await aiService.executeCEOChat(messages, requestId, userId);
+
+    return c.json({
+      success: response.success,
+      reply: response.data?.choices?.[0]?.message?.content || 'No response',
+      data: response.data,
+      metrics: {
+        duration: response.totalDuration,
+        attempts: response.attempts
+      }
+    });
+  } catch (error) {
+    console.error('CEO chat error:', error);
+    return c.json({
+      error: 'CEO chat failed',
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }

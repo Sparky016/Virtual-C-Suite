@@ -211,6 +211,23 @@
                     }
                 },
                 {
+                    "name": "CEO Chat",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/ceo-chat",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"messages\": [\n        { \"role\": \"user\", \"content\": \"How can we cut costs?\" }\n    ],\n    \"userId\": \"cxo-123\"\n}"
+                        }
+                    }
+                },
+                {
                     "name": "Cache Put",
                     "request": {
                         "method": "POST",
