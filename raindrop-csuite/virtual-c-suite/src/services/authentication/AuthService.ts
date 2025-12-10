@@ -1,4 +1,5 @@
 import { Auth, type FirebaseIdToken } from 'firebase-auth-cloudflare-workers';
+import { ServiceAccountCredential } from 'firebase-auth-cloudflare-workers/dist/main/credential';
 import type { UserRecord } from 'firebase-auth-cloudflare-workers/dist/main/user-record';
 import type { KvCache } from '@liquidmetal-ai/raindrop-framework';
 import { LoggerService } from '../Logger/LoggerService';
@@ -10,15 +11,31 @@ export class AuthService {
     private logger: LoggerService;
     private auth: Auth;
 
-    constructor(projectId: string, kvCache: KvCache, logger: LoggerService) {
+    constructor(
+        projectId: string,
+        kvCache: KvCache,
+        logger: LoggerService,
+        clientEmail?: string,
+        privateKey?: string
+    ) {
         this.logger = logger;
 
         // Create a KV store adapter for caching public keys
         const keyStore = createKeyStore(kvCache, this.logger);
 
         // Initialize Firebase Auth for Cloudflare Workers
-        this.auth = Auth.getOrInitialize(projectId, keyStore);
-        this.logger.info('Firebase Auth initialized for Cloudflare Workers');
+        if (clientEmail && privateKey) {
+            const credential = new ServiceAccountCredential(JSON.stringify({
+                project_id: projectId,
+                client_email: clientEmail,
+                private_key: privateKey.replace(/\\n/g, '\n')
+            }));
+            this.auth = Auth.getOrInitialize(projectId, keyStore, credential);
+            this.logger.info('Firebase Auth initialized with service account credentials');
+        } else {
+            this.auth = Auth.getOrInitialize(projectId, keyStore);
+            this.logger.info('Firebase Auth initialized without service account credentials');
+        }
     }
 
     /**
