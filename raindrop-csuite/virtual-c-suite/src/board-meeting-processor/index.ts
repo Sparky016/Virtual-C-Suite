@@ -11,10 +11,6 @@ import { LoggerService } from '../services/Logger/LoggerService';
 import { StorageService } from '../services/StorageService';
 import { AIOrchestrationService } from '../services/AIOrchestrationService';
 
-interface ProcessorEnv extends Env {
-  POSTHOG_API_KEY?: string;
-}
-
 export default class extends Each<BucketEventNotification, Env> {
   async process(message: Message<BucketEventNotification>): Promise<void> {
     const event = message.body;
@@ -40,9 +36,9 @@ export default class extends Each<BucketEventNotification, Env> {
     // Initialize Services
     const inputStorage = new StorageService(this.env.INPUT_BUCKET);
     const outputStorage = new StorageService(this.env.OUTPUT_BUCKET);
-    const logger = new LoggerService((this.env as ProcessorEnv).POSTHOG_API_KEY);
+    const logger = new LoggerService(this.env.POSTHOG_API_KEY);
     const dbService = new DatabaseService(this.env.TRACKING_DB, logger);
-    const aiService = new AIOrchestrationService(this.env.AI, (this.env as ProcessorEnv).POSTHOG_API_KEY);
+    const aiService = new AIOrchestrationService(this.env.AI, this.env.POSTHOG_API_KEY);
 
     try {
       logger.info(`Processing uploaded file: ${event.object.key}`, {
@@ -69,7 +65,7 @@ export default class extends Each<BucketEventNotification, Env> {
 
       // Track analysis started
       const userId = file.customMetadata?.userId as string || 'unknown';
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_STARTED, {
+      trackEvent(this.env.POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_STARTED, {
         request_id: requestId,
         file_key: event.object.key
       });
@@ -120,14 +116,14 @@ export default class extends Each<BucketEventNotification, Env> {
       logger.info(`Processing completed`, { requestId, totalDuration });
 
       // Track report generation and analysis completion
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.REPORT_GENERATED, {
+      trackEvent(this.env.POSTHOG_API_KEY, userId, AnalyticsEvents.REPORT_GENERATED, {
         request_id: requestId,
         total_duration_ms: totalDuration,
         ai_duration_ms: (executives.cfo.duration + executives.cmo.duration + executives.coo.duration) / 3, // Avg duration
         synthesis_duration_ms: ceo.duration
       });
 
-      trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_COMPLETED, {
+      trackEvent(this.env.POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_COMPLETED, {
         request_id: requestId,
         total_duration_ms: totalDuration,
         total_duration_seconds: (totalDuration / 1000).toFixed(2)
@@ -142,7 +138,7 @@ export default class extends Each<BucketEventNotification, Env> {
         const userId = 'unknown';
 
         // Track analysis failure
-        trackEvent((this.env as ProcessorEnv).POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_FAILED, {
+        trackEvent(this.env.POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_FAILED, {
           request_id: requestId,
           error: errorMessage,
           duration_ms: Date.now() - startTime
