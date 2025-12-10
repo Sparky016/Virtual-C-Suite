@@ -1,0 +1,265 @@
+{
+    "info": {
+        "name": "Virtual C-Suite API",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Auth API",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3003/health"
+                    }
+                },
+                {
+                    "name": "Exchange Token",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3003/auth/exchange",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"idToken\": \"YOUR_FIREBASE_ID_TOKEN\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Get User (Session)",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3003/auth/user"
+                    }
+                },
+                {
+                    "name": "Refresh Token",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3003/auth/refresh",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"idToken\": \"YOUR_NEW_ID_TOKEN\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3003/auth/logout"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Upload API",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3000/health"
+                    }
+                },
+                {
+                    "name": "Upload File",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3000/upload",
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                },
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id",
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Status",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3000/status/:requestId",
+                        "variable": [
+                            {
+                                "key": "requestId",
+                                "value": "REQUEST_ID_HERE"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "Get Report",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3000/reports/:requestId",
+                        "variable": [
+                            {
+                                "key": "requestId",
+                                "value": "REQUEST_ID_HERE"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Analysis Coordinator",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3001/health"
+                    }
+                },
+                {
+                    "name": "List Documents",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "http://localhost:3001/api/documents?limit=10",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "3001",
+                            "path": [
+                                "api",
+                                "documents"
+                            ],
+                            "query": [
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "prefix",
+                                    "value": "",
+                                    "disabled": true
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Document",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3001/api/documents/:key",
+                        "variable": [
+                            {
+                                "key": "key",
+                                "value": "FILE_KEY_HERE"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "Search Documents",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/documents/search",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"query\": \"quarterly report\",\n    \"page\": 1,\n    \"pageSize\": 10\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Document Chat",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/documents/chat",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"objectId\": \"FILE_KEY_HERE\",\n    \"query\": \"What is the net income?\"\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Cache Put",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/cache",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"key\": \"test-key\",\n    \"value\": \"test-value\",\n    \"ttl\": 60\n}"
+                        }
+                    }
+                },
+                {
+                    "name": "Cache Get",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3001/api/cache/:key",
+                        "variable": [
+                            {
+                                "key": "key",
+                                "value": "test-key"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "Get Config",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3001/api/config"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Board Meeting Processor",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3002/health"
+                    }
+                }
+            ]
+        }
+    ]
+}
