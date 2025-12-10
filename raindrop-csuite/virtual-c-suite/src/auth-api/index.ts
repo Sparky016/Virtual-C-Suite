@@ -3,7 +3,6 @@ import { AuthService } from '../services/authentication/AuthService';
 import { LoggerService } from '../services/Logger/LoggerService';
 import { createHonoApp } from '../utils/create-app';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
-import { cors } from '../_app/cors';
 import { COOKIE_OPTIONS, SESSION_COOKIE_NAME, CLEAR_COOKIE_OPTIONS } from '../shared/cookie-config';
 import { getCookie, setCookie } from 'hono/cookie';
 

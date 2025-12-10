@@ -8,25 +8,12 @@ import { ReportService } from '../services/ReportService';
 import { LoggerService } from '../services/Logger/LoggerService';
 import { StorageService } from '../services/StorageService';
 import { Service } from '@liquidmetal-ai/raindrop-framework';
-import { Hono } from 'hono';
-import { logger } from 'hono/logger';
-import { cors } from 'hono/cors';
+import { createHonoApp } from '../utils/create-app';
 
-const app = new Hono<{ Bindings: AppBindings }>();
+const app = createHonoApp();
 export { app };
 
-// Middleware
-app.use('*', logger());
-app.use('*', async (c, next) => {
-  const corsMiddleware = cors({
-    origin: (origin) => {
-      const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') || ['*'];
-      if (allowedOrigins.includes('*')) return origin;
-      return allowedOrigins.includes(origin) ? origin : null;
-    },
-  });
-  return corsMiddleware(c, next);
-});
+// Middleware is handled by createHonoApp
 
 // Initialize rate limiter (10 requests per 15 minutes per user)
 const rateLimiter = new RateLimiter();

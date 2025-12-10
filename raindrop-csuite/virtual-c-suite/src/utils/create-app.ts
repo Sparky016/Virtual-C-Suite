@@ -18,6 +18,11 @@ export function createHonoApp(): Hono<{ Bindings: AppBindings }> {
     app.use('*', async (c, next) => {
         const corsMiddleware = cors({
             origin: (origin) => {
+                // Allow local development
+                if (origin && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
+                    return origin;
+                }
+
                 const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') || ['*'];
                 if (allowedOrigins.includes('*')) return origin; // Allow all if * is present (or default)
                 return allowedOrigins.includes(origin) ? origin : null;
