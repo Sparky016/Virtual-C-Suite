@@ -4,6 +4,38 @@ application "virtual-c-suite" {
     secret = false
   }
 
+  env "POSTHOG_API_KEY" {
+    secret = true
+  }
+
+  env "POSTHOG_HOST" {
+    secret = false
+  }
+
+  env "FRONTEND_URL" {
+    secret = false
+  }
+
+  env "FIREBASE_CLIENT_EMAIL" {
+    secret = false
+  }
+
+  env "FIREBASE_PRIVATE_KEY" {
+    secret = true
+  }
+
+  env "ALLOWED_ORIGINS" {
+    secret = false
+  }
+
+  env "SAMBANOVA_API_KEY" {
+    secret = true
+  }
+
+  env "ELEVENLABS_API_KEY" {
+    secret = true
+  }
+
   service "upload-api" {
     visibility = "public"
   }

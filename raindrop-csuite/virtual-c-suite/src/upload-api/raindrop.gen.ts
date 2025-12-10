@@ -6,14 +6,22 @@ export interface Env {
     app: App;
   };
   AI: Ai;
+  ALLOWED_ORIGINS: string;
   ANALYSIS_COORDINATOR: ServiceStub<import('../analysis-coordinator/index.js').default>;
   annotation: Annotation<Omit<MRNObject, 'type' | 'applicationName' | 'versionId'>>;
   AUTH_API: ServiceStub<import('../auth-api/index.js').default>;
+  ELEVENLABS_API_KEY: string;
+  FIREBASE_CLIENT_EMAIL: string;
+  FIREBASE_PRIVATE_KEY: string;
   FIREBASE_PROJECT_ID: string;
+  FRONTEND_URL: string;
   INPUT_BUCKET: Bucket;
   logger: Logger;
   mem: KvCache;
   OUTPUT_BUCKET: Bucket;
+  POSTHOG_API_KEY: string;
+  POSTHOG_HOST: string;
+  SAMBANOVA_API_KEY: string;
   tracer: Tracer;
   TRACKING_DB: SqlDatabase;
 }
