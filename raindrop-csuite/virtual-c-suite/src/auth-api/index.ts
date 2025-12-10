@@ -25,14 +25,20 @@ app.post('/auth/exchange', async (c) => {
         }
 
         const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const projectId = process.env.FIREBASE_PROJECT_ID || '';
-        const authService = new AuthService(projectId, c.env.mem, logger);
+        const projectId = c.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || '';
+        const authService = new AuthService(
+            projectId,
+            c.env.mem,
+            logger,
+            c.env.FIREBASE_CLIENT_EMAIL,
+            c.env.FIREBASE_PRIVATE_KEY
+        );
 
         // Verify the ID token
         const decodedToken = await authService.verifyIdToken(idToken);
 
-        // Create session cookie (14 days)
-        const expiresIn = 60 * 60 * 24 * 14 * 1000; // 14 days in milliseconds
+        // Create session cookie (5 days)
+        const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days in milliseconds
         const sessionCookie = await authService.createSessionCookie(idToken, expiresIn);
 
         // Get user details
