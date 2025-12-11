@@ -60,7 +60,7 @@ application "virtual-c-suite" {
   }
 
   service "analysis-coordinator" {
-    visibility = "private"
+    visibility = "public"
   }
 
   sql_database "tracking-db" {

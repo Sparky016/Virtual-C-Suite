@@ -167,7 +167,7 @@ app.post('/api/documents/chat', async (c) => {
   }
 });
 
-// CEO Chat (Conversation with Memory)
+// CEO Chat (Conversation with Board Consultation)
 app.post('/api/ceo-chat', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -182,10 +182,11 @@ app.post('/api/ceo-chat', async (c) => {
 
     return c.json({
       success: response.success,
-      reply: response.data?.choices?.[0]?.message?.content || 'No response',
-      data: response.data,
+      reply: response.reply,
+      consultedExecutives: response.consultedExecutives,
       metrics: {
         duration: response.totalDuration,
+        consultationDuration: response.consultationDuration,
         attempts: response.attempts
       }
     });

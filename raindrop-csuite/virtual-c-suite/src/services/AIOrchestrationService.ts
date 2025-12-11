@@ -1,5 +1,15 @@
 // AI Orchestration Service - Manages parallel AI analysis
-import { getCFOPrompt, getCMOPrompt, getCOOPrompt, getCEOSynthesisPrompt } from '../shared/prompts';
+import {
+  getCFOPrompt,
+  getCMOPrompt,
+  getCOOPrompt,
+  getCEOSynthesisPrompt,
+  getBoardConsultationDecisionPrompt,
+  getCFOChatPrompt,
+  getCMOChatPrompt,
+  getCOOChatPrompt,
+  getCEOChatSynthesisPrompt
+} from '../shared/prompts';
 import { retryAICall, RetryResult } from '../shared/retry-logic';
 import { trackAIPerformance, trackEvent, AnalyticsEvents } from '../analytics/analytics';
 
@@ -32,6 +42,28 @@ export interface AIOrchestrationResult {
   ceo?: CEOSynthesis;
   error?: string;
   totalDuration: number;
+}
+
+export interface BoardConsultationDecision {
+  executives: ('CFO' | 'CMO' | 'COO')[];
+  reasoning: string;
+}
+
+export interface ExecutiveConsultation {
+  role: 'CFO' | 'CMO' | 'COO';
+  advice: string;
+  duration: number;
+  attempts: number;
+  success: boolean;
+}
+
+export interface CEOChatResult {
+  reply: string;
+  consultedExecutives: ('CFO' | 'CMO' | 'COO')[];
+  consultationDuration?: number;
+  totalDuration: number;
+  attempts: number;
+  success: boolean;
 }
 
 export class AIOrchestrationService {
@@ -174,42 +206,213 @@ export class AIOrchestrationService {
   }
 
   /**
-   * Execute CEO chat with memory
+   * Execute CEO chat with board consultation
    */
   async executeCEOChat(
     messages: { role: string; content: string }[],
     requestId: string,
     userId: string
-  ): Promise<RetryResult<any>> {
-    const systemPrompt = "You are the CEO of my company with my company's best interest at heart.";
+  ): Promise<CEOChatResult> {
+    const startTime = Date.now();
+    let consultedExecutives: ('CFO' | 'CMO' | 'COO')[] = [];
+    let consultationDuration = 0;
 
-    const fullMessages = [
-      { role: 'system', content: systemPrompt },
-      ...messages
-    ];
+    try {
+      // Get the latest user message
+      const userMessages = messages.filter(m => m.role === 'user');
+      const latestUserMessage = userMessages[userMessages.length - 1]?.content || '';
 
-    const result = await retryAICall(
-      this.aiClient,
-      this.model,
-      {
-        model: this.model,
-        messages: fullMessages,
-        temperature: 0.7,
-        max_tokens: 1000
-      },
-      undefined,
-      'CEO Chat'
-    );
+      if (!latestUserMessage) {
+        throw new Error('No user message found');
+      }
 
-    // Track CEO chat performance
-    if (this.posthogKey) {
-      trackAIPerformance(this.posthogKey, userId, 'CEO_CHAT', result.totalDuration, result.attempts, result.success, {
-        request_id: requestId,
-        message_count: messages.length
-      }, this.environment);
+      // STEP 1: Decision - Determine which board members to consult
+      const decisionStartTime = Date.now();
+      const decision = await this.decideBoardConsultation(latestUserMessage, userId, requestId);
+      const decisionDuration = Date.now() - decisionStartTime;
+
+      console.log(`Board consultation decision took ${decisionDuration}ms`);
+
+      consultedExecutives = decision.executives;
+
+      // STEP 2: Parallel Execution - Consult selected executives (if any)
+      let boardAdvice: { role: string; advice: string }[] = [];
+
+      if (consultedExecutives.length > 0) {
+        const consultationStartTime = Date.now();
+
+        // Format conversation history (exclude the latest message as it's passed separately)
+        const conversationHistory = this.formatConversationHistory(messages.slice(0, -1));
+
+        // Execute parallel consultations
+        const consultations = await this.executeExecutiveConsultations(
+          consultedExecutives,
+          conversationHistory,
+          latestUserMessage
+        );
+
+        consultationDuration = Date.now() - consultationStartTime;
+
+        console.log(`Executive consultations completed in ${consultationDuration}ms`);
+
+        // Track each consultation
+        consultations.forEach(consultation => {
+          if (this.posthogKey) {
+            trackAIPerformance(
+              this.posthogKey,
+              userId,
+              `${consultation.role}_CHAT`,
+              consultation.duration,
+              consultation.attempts,
+              consultation.success,
+              { request_id: requestId },
+              this.environment
+            );
+          }
+        });
+
+        // Build board advice array
+        boardAdvice = consultations.map(c => ({
+          role: c.role,
+          advice: c.advice
+        }));
+      }
+
+      // STEP 3: Synthesis - CEO generates final response
+      const synthesisStartTime = Date.now();
+
+      const conversationHistory = this.formatConversationHistory(messages.slice(0, -1));
+
+      const synthesisResult = await retryAICall(
+        this.aiClient,
+        this.model,
+        {
+          model: this.model,
+          messages: [{
+            role: 'user',
+            content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice)
+          }],
+          temperature: 0.7,
+          max_tokens: 1000
+        },
+        undefined,
+        'CEO Chat Synthesis'
+      );
+
+      const synthesisDuration = Date.now() - synthesisStartTime;
+
+      if (!synthesisResult.success) {
+        throw new Error('CEO synthesis failed');
+      }
+
+      const reply = synthesisResult.data?.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
+
+      const totalDuration = Date.now() - startTime;
+
+      // Track overall CEO chat performance
+      if (this.posthogKey) {
+        trackAIPerformance(
+          this.posthogKey,
+          userId,
+          'CEO_CHAT',
+          totalDuration,
+          synthesisResult.attempts,
+          true,
+          {
+            request_id: requestId,
+            message_count: messages.length,
+            consulted_executives: consultedExecutives.join(','),
+            consultation_duration_ms: consultationDuration
+          },
+          this.environment
+        );
+
+        trackEvent(
+          this.posthogKey,
+          userId,
+          AnalyticsEvents.CEO_SYNTHESIS_COMPLETED,
+          {
+            request_id: requestId,
+            duration_ms: totalDuration,
+            consulted_executives: consultedExecutives.join(','),
+            had_consultation: consultedExecutives.length > 0
+          },
+          this.environment
+        );
+      }
+
+      return {
+        reply,
+        consultedExecutives,
+        consultationDuration: consultedExecutives.length > 0 ? consultationDuration : undefined,
+        totalDuration,
+        attempts: synthesisResult.attempts,
+        success: true
+      };
+
+    } catch (error) {
+      const totalDuration = Date.now() - startTime;
+
+      console.error('CEO chat error:', error);
+
+      // Fallback: Direct CEO response without consultation
+      try {
+        console.log('Attempting fallback CEO response without consultation');
+
+        const fallbackResult = await retryAICall(
+          this.aiClient,
+          this.model,
+          {
+            model: this.model,
+            messages: [
+              { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
+              ...messages
+            ],
+            temperature: 0.7,
+            max_tokens: 1000
+          },
+          undefined,
+          'CEO Chat Fallback'
+        );
+
+        if (fallbackResult.success) {
+          const reply = fallbackResult.data?.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
+
+          // Track fallback performance
+          if (this.posthogKey) {
+            trackAIPerformance(
+              this.posthogKey,
+              userId,
+              'CEO_CHAT_FALLBACK',
+              totalDuration,
+              fallbackResult.attempts,
+              true,
+              { request_id: requestId },
+              this.environment
+            );
+          }
+
+          return {
+            reply,
+            consultedExecutives: [],
+            totalDuration,
+            attempts: fallbackResult.attempts,
+            success: true
+          };
+        }
+      } catch (fallbackError) {
+        console.error('Fallback CEO response also failed:', fallbackError);
+      }
+
+      // Ultimate fallback
+      return {
+        reply: 'I apologize, but I encountered an error processing your request. Please try again.',
+        consultedExecutives: [],
+        totalDuration,
+        attempts: 0,
+        success: false
+      };
     }
-
-    return result;
   }
 
   // Private helper methods
@@ -294,5 +497,191 @@ export class AIOrchestrationService {
       request_id: request.requestId,
       duration_ms: result.totalDuration
     }, this.environment);
+  }
+
+  // Board Consultation Methods for CEO Chat
+
+  /**
+   * Determine which board members should be consulted
+   */
+  private async decideBoardConsultation(
+    userMessage: string,
+    userId: string,
+    requestId: string
+  ): Promise<BoardConsultationDecision> {
+    try {
+      const result = await retryAICall(
+        this.aiClient,
+        this.model,
+        {
+          model: this.model,
+          messages: [{ role: 'user', content: getBoardConsultationDecisionPrompt(userMessage) }],
+          temperature: 0.3, // Low temperature for consistent decision-making
+          max_tokens: 200
+        },
+        undefined,
+        'Board Consultation Decision'
+      );
+
+      if (!result.success) {
+        console.warn('Board consultation decision failed, defaulting to no consultation');
+        return { executives: [], reasoning: 'Decision step failed - CEO will respond directly' };
+      }
+
+      const content = result.data?.choices[0]?.message?.content || '{}';
+
+      // Parse JSON response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.warn('No valid JSON found in decision response, defaulting to no consultation');
+        return { executives: [], reasoning: 'Invalid response format - CEO will respond directly' };
+      }
+
+      const decision = JSON.parse(jsonMatch[0]) as BoardConsultationDecision;
+
+      // Validate executives array
+      const validExecutives = ['CFO', 'CMO', 'COO'];
+      decision.executives = decision.executives.filter(exec => validExecutives.includes(exec));
+
+      console.log(`Board consultation decision: ${decision.executives.join(', ') || 'None'} - ${decision.reasoning}`);
+
+      return decision;
+
+    } catch (error) {
+      console.error('Error in board consultation decision:', error);
+      return { executives: [], reasoning: 'Error in decision step - CEO will respond directly' };
+    }
+  }
+
+  /**
+   * Consult with CFO
+   */
+  private async consultCFO(
+    conversationHistory: string,
+    userQuestion: string
+  ): Promise<ExecutiveConsultation> {
+    const result = await retryAICall(
+      this.aiClient,
+      this.model,
+      {
+        model: this.model,
+        messages: [{ role: 'user', content: getCFOChatPrompt(conversationHistory, userQuestion) }],
+        temperature: 0.7,
+        max_tokens: 400
+      },
+      undefined,
+      'CFO Consultation'
+    );
+
+    return {
+      role: 'CFO',
+      advice: result.data?.choices[0]?.message?.content || 'CFO advice unavailable',
+      duration: result.totalDuration,
+      attempts: result.attempts,
+      success: result.success
+    };
+  }
+
+  /**
+   * Consult with CMO
+   */
+  private async consultCMO(
+    conversationHistory: string,
+    userQuestion: string
+  ): Promise<ExecutiveConsultation> {
+    const result = await retryAICall(
+      this.aiClient,
+      this.model,
+      {
+        model: this.model,
+        messages: [{ role: 'user', content: getCMOChatPrompt(conversationHistory, userQuestion) }],
+        temperature: 0.7,
+        max_tokens: 400
+      },
+      undefined,
+      'CMO Consultation'
+    );
+
+    return {
+      role: 'CMO',
+      advice: result.data?.choices[0]?.message?.content || 'CMO advice unavailable',
+      duration: result.totalDuration,
+      attempts: result.attempts,
+      success: result.success
+    };
+  }
+
+  /**
+   * Consult with COO
+   */
+  private async consultCOO(
+    conversationHistory: string,
+    userQuestion: string
+  ): Promise<ExecutiveConsultation> {
+    const result = await retryAICall(
+      this.aiClient,
+      this.model,
+      {
+        model: this.model,
+        messages: [{ role: 'user', content: getCOOChatPrompt(conversationHistory, userQuestion) }],
+        temperature: 0.7,
+        max_tokens: 400
+      },
+      undefined,
+      'COO Consultation'
+    );
+
+    return {
+      role: 'COO',
+      advice: result.data?.choices[0]?.message?.content || 'COO advice unavailable',
+      duration: result.totalDuration,
+      attempts: result.attempts,
+      success: result.success
+    };
+  }
+
+  /**
+   * Execute parallel consultations with selected executives
+   */
+  private async executeExecutiveConsultations(
+    executives: ('CFO' | 'CMO' | 'COO')[],
+    conversationHistory: string,
+    userQuestion: string
+  ): Promise<ExecutiveConsultation[]> {
+    if (executives.length === 0) {
+      return [];
+    }
+
+    const consultationPromises = executives.map(exec => {
+      switch (exec) {
+        case 'CFO':
+          return this.consultCFO(conversationHistory, userQuestion);
+        case 'CMO':
+          return this.consultCMO(conversationHistory, userQuestion);
+        case 'COO':
+          return this.consultCOO(conversationHistory, userQuestion);
+      }
+    });
+
+    const consultations = await Promise.all(consultationPromises);
+
+    // Filter out failed consultations but don't fail the entire request
+    return consultations.filter(c => c.success);
+  }
+
+  /**
+   * Format conversation history from messages array
+   */
+  private formatConversationHistory(messages: { role: string; content: string }[]): string {
+    if (messages.length === 0) {
+      return 'No previous conversation.';
+    }
+
+    return messages
+      .map(msg => {
+        const role = msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'CEO' : 'System';
+        return `${role}: ${msg.content}`;
+      })
+      .join('\n\n');
   }
 }
