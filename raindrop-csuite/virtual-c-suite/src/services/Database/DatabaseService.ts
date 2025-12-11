@@ -222,7 +222,17 @@ export class DatabaseService {
   async getActiveBrandDocument(userId: string): Promise<BrandDocument | null> {
     try {
       const result = await this.db.prepare(
-        `SELECT * FROM brand_documents
+        `SELECT
+          id,
+          user_id as userId,
+          document_key as documentKey,
+          original_filename as originalFilename,
+          file_size as fileSize,
+          content_type as contentType,
+          status,
+          created_at as createdAt,
+          updated_at as updatedAt
+         FROM brand_documents
          WHERE user_id = ? AND status = 'active'`
       ).bind(userId).first();
 
