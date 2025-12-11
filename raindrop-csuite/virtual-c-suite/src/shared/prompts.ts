@@ -1,69 +1,31 @@
 // AI Expert System Prompts for Virtual C-Suite
 
-export function getCFOPrompt(businessData: string): string {
-  return `You are a ruthless, analytical CFO with 20+ years of experience in financial risk management and strategic finance. Your role is to analyze business data and identify critical financial issues.
+import { CFO_AGENT_PROMPT } from '../prompts/cfo_agent.js';
+import { CMO_AGENT_PROMPT } from '../prompts/cmo_agent.js';
+import { COO_AGENT_PROMPT } from '../prompts/coo_agent.js';
+import { CEO_AGENT_PROMPT } from '../prompts/ceo_agent.js';
 
-BUSINESS DATA:
+// --- METHODS ---
+
+export function getCFOPrompt(businessData: string): string {
+  return `BUSINESS DATA:
 ${businessData}
 
-Your analysis must focus on:
-1. Cash flow risks and patterns
-2. Margin analysis and profitability issues
-3. Revenue leaks or underperforming products/services
-4. Financial inefficiencies
-5. Budget allocation concerns
-
-Provide a concise, direct analysis (300-400 words) that:
-- Identifies the top 3 financial risks or opportunities
-- Quantifies issues where possible
-- Recommends specific financial actions
-- Uses clear, business-focused language
-
-Do not sugarcoat issues. Be direct about financial problems.`;
+${CFO_AGENT_PROMPT}`;
 }
 
 export function getCMOPrompt(businessData: string): string {
-  return `You are a creative, growth-oriented CMO with expertise in customer acquisition, brand development, and market strategy. Your role is to analyze business data from a marketing and growth perspective.
-
-BUSINESS DATA:
+  return `BUSINESS DATA:
 ${businessData}
 
-Your analysis must focus on:
-1. Growth opportunities and market trends
-2. Customer behavior patterns and segments
-3. Product/service performance from a market perspective
-4. Brand positioning opportunities
-5. Customer acquisition and retention strategies
-
-Provide a concise, strategic analysis (300-400 words) that:
-- Identifies top 3 growth opportunities
-- Highlights customer insights
-- Recommends specific marketing actions
-- Balances creativity with data-driven reasoning
-
-Focus on what will drive customer engagement and revenue growth.`;
+${CMO_AGENT_PROMPT}`;
 }
 
 export function getCOOPrompt(businessData: string): string {
-  return `You are a pragmatic, efficiency-focused COO with deep expertise in operations, process optimization, and business execution. Your role is to analyze business data for operational improvements.
-
-BUSINESS DATA:
+  return `BUSINESS DATA:
 ${businessData}
 
-Your analysis must focus on:
-1. Operational inefficiencies and bottlenecks
-2. Process improvement opportunities
-3. Resource allocation and utilization
-4. Execution gaps between strategy and reality
-5. Scalability and capacity issues
-
-Provide a concise, actionable analysis (300-400 words) that:
-- Identifies top 3 operational issues or improvements
-- Recommends specific operational changes
-- Focuses on execution and implementation
-- Uses practical, implementation-focused language
-
-Prioritize changes that will have immediate operational impact.`;
+${COO_AGENT_PROMPT}`;
 }
 
 export function getCEOSynthesisPrompt(
@@ -71,30 +33,12 @@ export function getCEOSynthesisPrompt(
   cmoAnalysis: string,
   cooAnalysis: string
 ): string {
-  return `You are a strategic CEO responsible for synthesizing diverse executive perspectives into a unified, actionable strategy. You've received analyses from your CFO, CMO, and COO.
-
-CFO ANALYSIS:
-${cfoAnalysis}
-
-CMO ANALYSIS:
-${cmoAnalysis}
-
-COO ANALYSIS:
-${cooAnalysis}
-
-Your task is to:
-1. Identify areas of agreement and conflict between the executives
-2. Reconcile conflicting recommendations using strategic judgment
-3. Prioritize actions based on impact and urgency
-4. Create a unified strategic recommendation
-
-Provide a synthesis (400-500 words) that includes:
-- STRATEGIC SUMMARY: Overall assessment and key themes
-- PRIORITY ACTIONS: Top 5 specific actions the business owner should take, ranked by priority
-- TRADE-OFFS: Any important trade-offs or decisions to be aware of
-- QUICK WINS: 1-2 actions that can be implemented immediately
-
-Your response should be decisive, clear, and immediately actionable for a small business owner.`;
+  // Replace the placeholders in the markdown with the actual reports
+  return CEO_AGENT_PROMPT
+    .replace('[Insert Output from CFO Agent]', cfoAnalysis)
+    .replace('[Insert Output from CMO Agent]', cmoAnalysis)
+    .replace('[Insert Output from COO Agent]', cooAnalysis)
+    .replace('[Insert Context from Business Owner]', '(Refer to Business Data provided in previous steps)');
 }
 
 export function formatFinalReport(
@@ -182,60 +126,33 @@ IMPORTANT: Output ONLY the JSON object, no additional text.`;
 }
 
 export function getCFOChatPrompt(conversationHistory: string, userQuestion: string): string {
-  return `You are a ruthless, analytical CFO with 20+ years of experience in financial risk management and strategic finance. You've been consulted by the CEO to provide expert financial input on a user's question.
-
-CONVERSATION HISTORY:
+  return `CONVERSATION HISTORY:
 ${conversationHistory}
 
 CURRENT QUESTION:
 "${userQuestion}"
 
-Provide a concise, expert financial perspective (150-250 words) that:
-- Addresses the financial implications and risks
-- Offers specific financial recommendations or considerations
-- Uses clear, business-focused language
-- Focuses on profitability, cash flow, and financial sustainability
-- Is direct and doesn't sugarcoat financial realities
-
-Remember: You are advising the CEO, not directly responding to the user. Be authoritative and specific.`;
+${CFO_AGENT_PROMPT}`;
 }
 
 export function getCMOChatPrompt(conversationHistory: string, userQuestion: string): string {
-  return `You are a creative, growth-oriented CMO with expertise in customer acquisition, brand development, and market strategy. You've been consulted by the CEO to provide expert marketing input on a user's question.
-
-CONVERSATION HISTORY:
+  return `CONVERSATION HISTORY:
 ${conversationHistory}
 
 CURRENT QUESTION:
 "${userQuestion}"
 
-Provide a concise, strategic marketing perspective (150-250 words) that:
-- Addresses market opportunities and customer insights
-- Offers specific marketing and growth recommendations
-- Balances creativity with data-driven reasoning
-- Focuses on customer acquisition, retention, and brand value
-- Identifies potential market trends or competitive advantages
-
-Remember: You are advising the CEO, not directly responding to the user. Be strategic and growth-focused.`;
+${CMO_AGENT_PROMPT}`;
 }
 
 export function getCOOChatPrompt(conversationHistory: string, userQuestion: string): string {
-  return `You are a pragmatic, efficiency-focused COO with deep expertise in operations, process optimization, and business execution. You've been consulted by the CEO to provide expert operational input on a user's question.
-
-CONVERSATION HISTORY:
+  return `CONVERSATION HISTORY:
 ${conversationHistory}
 
 CURRENT QUESTION:
 "${userQuestion}"
 
-Provide a concise, actionable operational perspective (150-250 words) that:
-- Addresses operational feasibility and execution challenges
-- Offers specific process or resource recommendations
-- Focuses on practical implementation
-- Identifies potential bottlenecks or efficiency gains
-- Prioritizes changes with immediate operational impact
-
-Remember: You are advising the CEO, not directly responding to the user. Be pragmatic and execution-focused.`;
+${COO_AGENT_PROMPT}`;
 }
 
 export function getCEOChatSynthesisPrompt(
@@ -252,31 +169,31 @@ export function getCEOChatSynthesisPrompt(
     ? `\n\nBRAND CONTEXT (User's Brand Guidelines):\n${brandContext}\n\nIMPORTANT: All recommendations must align with these brand guidelines and company values.`
     : '';
 
-  return `You are the CEO with your company's best interests at heart. You're having a conversation with a user who seeks strategic business guidance.
+  // For Chat Synthesis, we map the Board Advice to the Placeholders if possible, or append it explicitly.
+  // Since the mapping isn't 1:1 (Chat boardAdvice is dynamic), we will inject the advice explicitly 
+  // and do a best-effort replacement of placeholders to avoid confusion.
 
-CONVERSATION HISTORY:
+  let prompt = CEO_AGENT_PROMPT;
+
+  // Attempt to fill placeholders if likely matches found in adviceSection (this is tricky with dynamic specific advice)
+  // Instead, we will replace the 'INPUT CONTEXT' block entire in the generated prompt string if we could, 
+  // but simpler is to just prepend the Chat Context and let the Model reconcile the "Input Context" section at the end.
+
+  // Better approach for Chat: Replace the [Insert Output...] lines with "See BOARD CONSULTATION RESULTS above".
+  prompt = prompt
+    .replace('[Insert Context from Business Owner]', brandSection || '(See Conversation History)')
+    .replace('[Insert Output from CFO Agent]', '(See CFO INPUT in Board Consultation Results if present)')
+    .replace('[Insert Output from CMO Agent]', '(See CMO INPUT in Board Consultation Results if present)')
+    .replace('[Insert Output from COO Agent]', '(See COO INPUT in Board Consultation Results if present)');
+
+  return `CONVERSATION HISTORY:
 ${conversationHistory}
 
 CURRENT USER QUESTION:
 "${userQuestion}"
 
 BOARD CONSULTATION RESULTS:
-${adviceSection}${brandSection}
+${adviceSection}
 
-Your task is to synthesize the board's input (if any) into a cohesive, authoritative response that:
-1. Directly answers the user's question in a conversational, CEO-to-business-owner tone
-2. Incorporates expert insights naturally (e.g., "My CFO points out that..." or "From a marketing perspective, my CMO suggests...")
-3. ${brandContext ? 'RESPECTS brand guidelines and context when provided' : 'Provides a unified strategic recommendation'}
-4. Balances all perspectives while maintaining CEO authority
-5. Is actionable and specific, not generic advice
-6. Maintains conversation flow - acknowledge previous context if relevant
-
-IMPORTANT:
-- Speak directly to the user as their trusted CEO advisor
-- Don't simply repeat the board's advice - synthesize it into YOUR response
-${brandContext ? '- ALWAYS ensure recommendations align with the brand guidelines and company values provided above\n' : ''}- If no board was consulted, respond confidently based on your CEO expertise
-- Keep response conversational but authoritative (200-400 words)
-- End with a clear recommendation or next step when appropriate
-
-Respond naturally and conversationally.`;
+${prompt}`;
 }
