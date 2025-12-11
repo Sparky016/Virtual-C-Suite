@@ -1,30 +1,109 @@
-
-import { PostHog } from 'posthog-node';
 import { AppBindings } from '../config/env';
 
-// Singleton PostHog client
-let posthogClient: PostHog | null = null;
+// PostHog Configuration - using fetch API for Workers compatibility
+const DEFAULT_POSTHOG_HOST = 'https://us.i.posthog.com';
 
-// PostHog Configuration
-const posthogHost = process.env.POSTHOG_HOST;
+/**
+ * Workers-compatible PostHog client using fetch API
+ * Works in both Cloudflare Workers and Node.js (18+)
+ */
+class WorkersPostHogClient {
+  private apiKey: string;
+  private host: string;
+
+  constructor(apiKey: string, host?: string) {
+    this.apiKey = apiKey;
+    this.host = host || DEFAULT_POSTHOG_HOST;
+  }
+
+  /**
+   * Capture an event
+   */
+  capture(options: {
+    distinctId: string;
+    event: string;
+    properties?: Record<string, any>;
+  }): void {
+    // Fire and forget - don't await to avoid blocking
+    fetch(`${this.host}/capture/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: this.apiKey,
+        distinct_id: options.distinctId,
+        event: options.event,
+        properties: options.properties || {},
+        timestamp: new Date().toISOString(),
+      }),
+    }).catch(error => {
+      console.error('Failed to capture PostHog event:', error);
+    });
+  }
+
+  /**
+   * Identify a user
+   */
+  identify(options: {
+    distinctId: string;
+    properties?: Record<string, any>;
+  }): void {
+    // Fire and forget - don't await to avoid blocking
+    fetch(`${this.host}/capture/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: this.apiKey,
+        distinct_id: options.distinctId,
+        event: '$identify',
+        properties: {
+          $set: options.properties || {},
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    }).catch(error => {
+      console.error('Failed to identify PostHog user:', error);
+    });
+  }
+
+  /**
+   * Flush - no-op in Workers since we send immediately
+   */
+  async flush(): Promise<void> {
+    // No-op: we send events immediately via fetch
+    return Promise.resolve();
+  }
+
+  /**
+   * Shutdown - no-op in Workers
+   */
+  async shutdown(): Promise<void> {
+    // No-op: nothing to clean up
+    return Promise.resolve();
+  }
+}
+
+// Singleton PostHog client
+let posthogClient: WorkersPostHogClient | null = null;
+let currentApiKey: string | undefined = undefined;
 
 /**
  * Initialize PostHog client (lazy initialization)
  */
-function getPostHogClient(apiKey?: string): PostHog | null {
+function getPostHogClient(apiKey?: string, host?: string): WorkersPostHogClient | null {
   if (!apiKey) {
     console.warn('PostHog API key not provided. Analytics disabled.');
     return null;
   }
 
-  if (!posthogClient) {
-    posthogClient = new PostHog(apiKey, {
-      host: posthogHost,
-      enableExceptionAutocapture: true,
-      flushAt: 1, // Flush immediately for development/testing
-      flushInterval: 0 // Flush immediately
-    });
-    console.log(`PostHog analytics initialized with host: ${posthogHost}`);
+  // Reinitialize if API key changed
+  if (!posthogClient || currentApiKey !== apiKey) {
+    posthogClient = new WorkersPostHogClient(apiKey, host);
+    currentApiKey = apiKey;
+    console.log(`PostHog analytics initialized with host: ${host || DEFAULT_POSTHOG_HOST}`);
   }
 
   return posthogClient;
@@ -76,7 +155,8 @@ export function trackEvent(
   apiKey: string | undefined,
   userId: string,
   event: string,
-  properties?: Record<string, any>
+  properties?: Record<string, any>,
+  environment?: string
 ): void {
   const client = getPostHogClient(apiKey);
   if (!client) return;
@@ -89,7 +169,7 @@ export function trackEvent(
       properties: {
         ...properties,
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'production'
+        environment: environment || 'production'
       }
     });
 
@@ -109,13 +189,14 @@ export function trackTimedEvent(
   userId: string,
   event: string,
   durationMs: number,
-  properties?: Record<string, any>
+  properties?: Record<string, any>,
+  environment?: string
 ): void {
   trackEvent(apiKey, userId, event, {
     ...properties,
     duration_ms: durationMs,
     duration_seconds: (durationMs / 1000).toFixed(2)
-  });
+  }, environment);
 }
 
 /**
@@ -183,7 +264,8 @@ export function trackAIPerformance(
   durationMs: number,
   attempts: number,
   success: boolean,
-  properties?: Record<string, any>
+  properties?: Record<string, any>,
+  environment?: string
 ): void {
   trackTimedEvent(
     apiKey,
@@ -196,6 +278,7 @@ export function trackAIPerformance(
       attempts,
       success,
       retried: attempts > 1
-    }
+    },
+    environment
   );
 }

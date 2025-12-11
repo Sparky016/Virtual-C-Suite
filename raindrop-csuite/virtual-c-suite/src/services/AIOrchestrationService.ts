@@ -37,11 +37,13 @@ export interface AIOrchestrationResult {
 export class AIOrchestrationService {
   private aiClient: any;
   private posthogKey?: string;
+  private environment?: string;
   private model: string = 'llama-3.3-70b';
 
-  constructor(aiClient: any, posthogKey?: string) {
+  constructor(aiClient: any, posthogKey?: string, environment?: string) {
     this.aiClient = aiClient;
     this.posthogKey = posthogKey;
+    this.environment = environment;
   }
 
   /**
@@ -114,12 +116,12 @@ export class AIOrchestrationService {
     // Track CEO synthesis performance
     trackAIPerformance(this.posthogKey, request.userId, 'CEO', ceoResult.totalDuration, ceoResult.attempts, ceoResult.success, {
       request_id: request.requestId
-    });
+    }, this.environment);
 
     trackEvent(this.posthogKey, request.userId, AnalyticsEvents.CEO_SYNTHESIS_COMPLETED, {
       request_id: request.requestId,
       duration_ms: duration
-    });
+    }, this.environment);
 
     if (!ceoResult.success) {
       throw new Error(`CEO synthesis failed: ${ceoResult.error?.message}`);
@@ -204,7 +206,7 @@ export class AIOrchestrationService {
       trackAIPerformance(this.posthogKey, userId, 'CEO_CHAT', result.totalDuration, result.attempts, result.success, {
         request_id: requestId,
         message_count: messages.length
-      });
+      }, this.environment);
     }
 
     return result;
@@ -291,6 +293,6 @@ export class AIOrchestrationService {
     trackEvent(this.posthogKey, request.userId, eventMap[role], {
       request_id: request.requestId,
       duration_ms: result.totalDuration
-    });
+    }, this.environment);
   }
 }

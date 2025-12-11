@@ -23,8 +23,8 @@ app.post('/auth/exchange', async (c) => {
             return c.json({ error: 'ID token is required' }, 400);
         }
 
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const projectId = c.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || '';
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+        const projectId = c.env.FIREBASE_PROJECT_ID || '';
         const authService = new AuthService(
             projectId,
             c.env.mem,
@@ -58,7 +58,7 @@ app.post('/auth/exchange', async (c) => {
         });
 
     } catch (error: any) {
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
 
         // Handle specific Firebase error types
         if (error.code === 'auth/email-not-verified') {
@@ -93,8 +93,8 @@ app.get('/auth/user', async (c) => {
             return c.json({ error: 'No session found' }, 401);
         }
 
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+        const projectId = c.env.FIREBASE_PROJECT_ID || '';
         const authService = new AuthService(projectId, c.env.mem, logger);
 
         // Verify session cookie and get decoded claims
@@ -111,7 +111,7 @@ app.get('/auth/user', async (c) => {
         });
 
     } catch (error: any) {
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
 
         // Check if token expired
         if (error.code === 'auth/session-cookie-expired' || error.code === 'auth/session-cookie-revoked') {
@@ -139,8 +139,8 @@ app.post('/auth/refresh', async (c) => {
             return c.json({ error: 'ID token is required' }, 401);
         }
 
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
-        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+        const projectId = c.env.FIREBASE_PROJECT_ID || '';
         const authService = new AuthService(projectId, c.env.mem, logger);
 
         logger.info('Refreshing session');
@@ -172,7 +172,7 @@ app.post('/auth/refresh', async (c) => {
         });
 
     } catch (error: any) {
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
 
         // Handle specific errors
         if (error.code === 'auth/invalid-id-token' || error.code === 'auth/argument-error') {
@@ -196,7 +196,7 @@ app.post('/auth/refresh', async (c) => {
 
 app.post('/auth/logout', async (c) => {
     try {
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
         const sessionCookie = getCookie(c, SESSION_COOKIE_NAME);
 
         if (!sessionCookie) {
@@ -204,7 +204,7 @@ app.post('/auth/logout', async (c) => {
             return c.json({ success: true });
         }
 
-        const projectId = process.env.FIREBASE_PROJECT_ID || '';
+        const projectId = c.env.FIREBASE_PROJECT_ID || '';
         const authService = new AuthService(projectId, c.env.mem, logger);
 
         // Verify session cookie to get user ID
@@ -223,7 +223,7 @@ app.post('/auth/logout', async (c) => {
         });
 
     } catch (error: any) {
-        const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
         logger.error('Logout error', error);
 
         // Even on error, clear the local session

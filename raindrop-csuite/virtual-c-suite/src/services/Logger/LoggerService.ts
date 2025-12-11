@@ -3,16 +3,18 @@ import { trackEvent, trackAIPerformance, AnalyticsEvents } from '../../analytics
 
 export class LoggerService {
   private posthogKey?: string;
+  private environment?: string;
 
-  constructor(posthogKey?: string) {
+  constructor(posthogKey?: string, environment?: string) {
     this.posthogKey = posthogKey;
+    this.environment = environment;
   }
 
   /**
    * Track a generic event
    */
   trackEvent(userId: string, event: string, properties?: Record<string, any>): void {
-    trackEvent(this.posthogKey, userId, event, properties);
+    trackEvent(this.posthogKey, userId, event, properties, this.environment);
   }
 
   /**

@@ -36,9 +36,10 @@ export default class extends Each<BucketEventNotification, Env> {
     // Initialize Services
     const inputStorage = new StorageService(this.env.INPUT_BUCKET);
     const outputStorage = new StorageService(this.env.OUTPUT_BUCKET);
-    const logger = new LoggerService(this.env.POSTHOG_API_KEY);
+    const nodeEnv = (this.env as any).NODE_ENV;
+    const logger = new LoggerService(this.env.POSTHOG_API_KEY, nodeEnv);
     const dbService = new DatabaseService(this.env.TRACKING_DB, logger);
-    const aiService = new AIOrchestrationService(this.env.AI, this.env.POSTHOG_API_KEY);
+    const aiService = new AIOrchestrationService(this.env.AI, this.env.POSTHOG_API_KEY, nodeEnv);
 
     try {
       logger.info(`Processing uploaded file: ${event.object.key}`, {
@@ -68,7 +69,7 @@ export default class extends Each<BucketEventNotification, Env> {
       trackEvent(this.env.POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_STARTED, {
         request_id: requestId,
         file_key: event.object.key
-      });
+      }, nodeEnv);
 
       // Read file content
       const fileContent = await file.text();
@@ -121,13 +122,13 @@ export default class extends Each<BucketEventNotification, Env> {
         total_duration_ms: totalDuration,
         ai_duration_ms: (executives.cfo.duration + executives.cmo.duration + executives.coo.duration) / 3, // Avg duration
         synthesis_duration_ms: ceo.duration
-      });
+      }, nodeEnv);
 
       trackEvent(this.env.POSTHOG_API_KEY, userId, AnalyticsEvents.ANALYSIS_COMPLETED, {
         request_id: requestId,
         total_duration_ms: totalDuration,
         total_duration_seconds: (totalDuration / 1000).toFixed(2)
-      });
+      }, nodeEnv);
 
     } catch (error) {
       logger.error('Error processing file', error);
@@ -142,7 +143,7 @@ export default class extends Each<BucketEventNotification, Env> {
           request_id: requestId,
           error: errorMessage,
           duration_ms: Date.now() - startTime
-        });
+        }, nodeEnv);
 
         await dbService.updateAnalysisRequestStatus(requestId, 'failed', errorMessage);
       }

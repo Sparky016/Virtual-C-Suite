@@ -14,7 +14,9 @@ export function createHonoApp(): Hono<{ Bindings: AppBindings }> {
     // Apply global middleware here that should run for ALL services
     app.use('*', logger());
 
-    // Configure CORS using the environment variable if available, or default to *
+    // Configure CORS
+    // Note: Framework-level CORS is configured in src/_app/cors.ts
+    // This provides application-level CORS for services
     app.use('*', async (c, next) => {
         const corsMiddleware = cors({
             origin: (origin) => {
@@ -23,10 +25,13 @@ export function createHonoApp(): Hono<{ Bindings: AppBindings }> {
                     return origin;
                 }
 
-                const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') || ['*'];
-                if (allowedOrigins.includes('*')) return origin; // Allow all if * is present (or default)
+                const allowedOrigins = c.env?.ALLOWED_ORIGINS?.split(',') || ['*'];
+                if (allowedOrigins.includes('*')) return origin;
                 return allowedOrigins.includes(origin) ? origin : null;
             },
+            allowHeaders: ['Content-Type', 'Authorization', 'x-sambanova-key'],
+            allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            credentials: true,
         });
         return corsMiddleware(c, next);
     });

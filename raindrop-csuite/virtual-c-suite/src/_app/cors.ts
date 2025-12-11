@@ -22,8 +22,8 @@ export const cors = createCorsHandler({
 
         return null; // Block other origins
     },
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-sambanova-key'],
     credentials: true, // Needed if frontend sends auth headers/cookies
     maxAge: 86400
 });

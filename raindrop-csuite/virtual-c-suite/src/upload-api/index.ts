@@ -31,8 +31,8 @@ app.post('/upload', async (c) => {
     const userId = formData.get('userId') as string;
 
     // Initialize services for this request
-    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
-    const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+    const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
     const databaseService = new DatabaseService(c.env.TRACKING_DB, logger);
     const uploadService = new UploadService(loggerService);
     const storageService = new StorageService(c.env.INPUT_BUCKET);
@@ -110,7 +110,7 @@ app.post('/upload', async (c) => {
     }, 201, rateLimitHeaders);
 
   } catch (error) {
-    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
+    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
     loggerService.error('Upload error:', error);
     try {
       const formData = await c.req.formData();
@@ -136,8 +136,8 @@ app.get('/status/:requestId', async (c) => {
     const requestId = c.req.param('requestId');
 
     // Initialize services
-    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
-    const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+    const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
     const databaseService = new DatabaseService(c.env.TRACKING_DB, logger);
     const statusService = new StatusService(databaseService, loggerService);
 
@@ -173,7 +173,7 @@ app.get('/status/:requestId', async (c) => {
     });
 
   } catch (error) {
-    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
+    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
     loggerService.error('Status check error:', error);
     return c.json({
       error: 'Failed to check status',
@@ -188,8 +188,8 @@ app.get('/reports/:requestId', async (c) => {
     const requestId = c.req.param('requestId');
 
     // Initialize services
-    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
-    const logger = new LoggerService(c.env.POSTHOG_API_KEY);
+    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+    const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
     const databaseService = new DatabaseService(c.env.TRACKING_DB, logger);
     const reportService = new ReportService(databaseService, loggerService);
 
@@ -231,7 +231,7 @@ app.get('/reports/:requestId', async (c) => {
     });
 
   } catch (error) {
-    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY);
+    const loggerService = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
     loggerService.error('Report retrieval error:', error);
     return c.json({
       error: 'Failed to retrieve report',
