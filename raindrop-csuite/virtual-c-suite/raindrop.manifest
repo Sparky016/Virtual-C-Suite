@@ -63,6 +63,10 @@ application "virtual-c-suite" {
     visibility = "public"
   }
 
+  service "brand-api" {
+    visibility = "public"
+  }
+
   sql_database "tracking-db" {
   }
 }

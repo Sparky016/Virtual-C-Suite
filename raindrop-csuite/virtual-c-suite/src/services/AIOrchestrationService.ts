@@ -12,6 +12,10 @@ import {
 } from '../shared/prompts';
 import { retryAICall, RetryResult } from '../shared/retry-logic';
 import { trackAIPerformance, trackEvent, AnalyticsEvents } from '../analytics/analytics';
+import { SqlDatabase, Bucket } from '@liquidmetal-ai/raindrop-framework';
+import { DatabaseService } from './Database/DatabaseService';
+import { StorageService } from './StorageService';
+import { LoggerService } from './Logger/LoggerService';
 
 export interface AIAnalysisRequest {
   fileContent: string;
@@ -216,7 +220,9 @@ export class AIOrchestrationService {
   async executeCEOChat(
     messages: { role: string; content: string }[],
     requestId: string,
-    userId: string
+    userId: string,
+    db?: SqlDatabase,
+    bucket?: Bucket
   ): Promise<CEOChatResult> {
     const startTime = Date.now();
     let consultedExecutives: ('CFO' | 'CMO' | 'COO')[] = [];
@@ -229,6 +235,12 @@ export class AIOrchestrationService {
 
       if (!latestUserMessage) {
         throw new Error('No user message found');
+      }
+
+      // Fetch brand context if available
+      let brandContext: string | null = null;
+      if (db && bucket) {
+        brandContext = await this.fetchBrandContext(userId, db, bucket);
       }
 
       // STEP 1: Decision - Determine which board members to consult
@@ -295,7 +307,7 @@ export class AIOrchestrationService {
           model: this.model,
           messages: [{
             role: 'user',
-            content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice)
+            content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice, brandContext)
           }],
           temperature: 0.7,
           max_tokens: 1000
@@ -427,7 +439,9 @@ export class AIOrchestrationService {
   async *executeCEOChatStream(
     messages: { role: string; content: string }[],
     requestId: string,
-    userId: string
+    userId: string,
+    db?: SqlDatabase,
+    bucket?: Bucket
   ): AsyncGenerator<CEOChatStreamEvent> {
     const startTime = Date.now();
     let consultedExecutives: ('CFO' | 'CMO' | 'COO')[] = [];
@@ -440,6 +454,12 @@ export class AIOrchestrationService {
 
       if (!latestUserMessage) {
         throw new Error('No user message found');
+      }
+
+      // Fetch brand context if available
+      let brandContext: string | null = null;
+      if (db && bucket) {
+        brandContext = await this.fetchBrandContext(userId, db, bucket);
       }
 
       // STEP 1: Decision - Determine which board members to consult
@@ -540,7 +560,7 @@ export class AIOrchestrationService {
         const stream = await this.aiClient.run(this.model, {
           messages: [{
             role: 'user',
-            content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice)
+            content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice, brandContext)
           }],
           temperature: 0.7,
           max_tokens: 1000,
@@ -1210,5 +1230,45 @@ export class AIOrchestrationService {
         return `${role}: ${msg.content}`;
       })
       .join('\n\n');
+  }
+
+  /**
+   * Fetch brand document content for user
+   */
+  private async fetchBrandContext(
+    userId: string,
+    db: SqlDatabase,
+    bucket: Bucket
+  ): Promise<string | null> {
+    try {
+      const logger = new LoggerService(this.posthogKey, this.environment);
+      const databaseService = new DatabaseService(db, logger);
+      const storageService = new StorageService(bucket);
+
+      // Get active brand document
+      const brandDoc = await databaseService.getActiveBrandDocument(userId);
+
+      if (!brandDoc) {
+        console.log('No active brand document found for user:', userId);
+        return null;
+      }
+
+      // Fetch document content
+      const file = await storageService.get(brandDoc.documentKey);
+
+      if (!file) {
+        console.warn('Brand document not found in storage:', brandDoc.documentKey);
+        return null;
+      }
+
+      // Read text content
+      const text = await file.text();
+      console.log(`Loaded brand document for user ${userId}: ${text.length} chars`);
+
+      return text;
+    } catch (error) {
+      console.error('Error fetching brand context:', error);
+      return null; // Graceful degradation
+    }
   }
 }

@@ -241,11 +241,16 @@ Remember: You are advising the CEO, not directly responding to the user. Be prag
 export function getCEOChatSynthesisPrompt(
   conversationHistory: string,
   userQuestion: string,
-  boardAdvice: { role: string; advice: string }[]
+  boardAdvice: { role: string; advice: string }[],
+  brandContext?: string | null
 ): string {
   const adviceSection = boardAdvice.length > 0
     ? boardAdvice.map(({ role, advice }) => `${role} INPUT:\n${advice}`).join('\n\n')
     : 'No board consultation was needed for this query.';
+
+  const brandSection = brandContext
+    ? `\n\nBRAND CONTEXT (User's Brand Guidelines):\n${brandContext}\n\nIMPORTANT: All recommendations must align with these brand guidelines and company values.`
+    : '';
 
   return `You are the CEO with your company's best interests at heart. You're having a conversation with a user who seeks strategic business guidance.
 
@@ -256,12 +261,12 @@ CURRENT USER QUESTION:
 "${userQuestion}"
 
 BOARD CONSULTATION RESULTS:
-${adviceSection}
+${adviceSection}${brandSection}
 
 Your task is to synthesize the board's input (if any) into a cohesive, authoritative response that:
 1. Directly answers the user's question in a conversational, CEO-to-business-owner tone
 2. Incorporates expert insights naturally (e.g., "My CFO points out that..." or "From a marketing perspective, my CMO suggests...")
-3. Provides a unified strategic recommendation, not separate viewpoints
+3. ${brandContext ? 'RESPECTS brand guidelines and context when provided' : 'Provides a unified strategic recommendation'}
 4. Balances all perspectives while maintaining CEO authority
 5. Is actionable and specific, not generic advice
 6. Maintains conversation flow - acknowledge previous context if relevant
@@ -269,7 +274,7 @@ Your task is to synthesize the board's input (if any) into a cohesive, authorita
 IMPORTANT:
 - Speak directly to the user as their trusted CEO advisor
 - Don't simply repeat the board's advice - synthesize it into YOUR response
-- If no board was consulted, respond confidently based on your CEO expertise
+${brandContext ? '- ALWAYS ensure recommendations align with the brand guidelines and company values provided above\n' : ''}- If no board was consulted, respond confidently based on your CEO expertise
 - Keep response conversational but authoritative (200-400 words)
 - End with a clear recommendation or next step when appropriate
 

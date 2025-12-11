@@ -65,3 +65,32 @@ export interface ParsedFileData {
 export const MAX_FILE_SIZE_MB = 10;
 export const ALLOWED_FILE_TYPES = ['text/csv', 'application/pdf', 'text/plain'];
 export const ALLOWED_EXTENSIONS = ['.csv', '.pdf', '.txt'];
+
+export interface BrandDocument {
+  id?: number;
+  userId: string;
+  documentKey: string;
+  originalFilename: string;
+  fileSize: number;
+  contentType: string;
+  status: 'active' | 'inactive';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface BrandDocumentUploadResponse {
+  success: boolean;
+  documentId?: number;
+  documentKey?: string;
+  message: string;
+}
+
+export interface BrandDocumentListResponse {
+  document: {
+    id: number;
+    originalFilename: string;
+    fileSize: number;
+    contentType: string;
+    createdAt: string;
+  } | null;
+}

@@ -1,6 +1,7 @@
 // Database Service - Abstracts all database operations for testability
 import { SqlDatabase } from '@liquidmetal-ai/raindrop-framework';
 import { LoggerService } from '../Logger/LoggerService';
+import { BrandDocument } from '../../shared/types';
 
 export interface AnalysisRequest {
   request_id: string;
@@ -211,6 +212,90 @@ export class DatabaseService {
       this.logger.info(`Final report created successfully: ${requestId}`);
     } catch (error: any) {
       this.logger.error(`Failed to create final report: ${requestId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get active brand document for a user
+   */
+  async getActiveBrandDocument(userId: string): Promise<BrandDocument | null> {
+    try {
+      const result = await this.db.prepare(
+        `SELECT * FROM brand_documents
+         WHERE user_id = ? AND status = 'active'`
+      ).bind(userId).first();
+
+      if (!result) {
+        return null;
+      }
+
+      return result as unknown as BrandDocument;
+    } catch (error: any) {
+      this.logger.error(`Failed to get active brand document: ${userId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Deactivate all brand documents for a user
+   */
+  async deactivateAllBrandDocuments(userId: string): Promise<void> {
+    try {
+      await this.db.prepare(
+        `UPDATE brand_documents
+         SET status = 'inactive', updated_at = ?
+         WHERE user_id = ? AND status = 'active'`
+      ).bind(Date.now(), userId).run();
+
+      this.logger.info(`Deactivated brand documents for user: ${userId}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to deactivate brand documents: ${userId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create brand document record
+   */
+  async createBrandDocument(doc: BrandDocument): Promise<number> {
+    try {
+      const result = await this.db.prepare(
+        `INSERT INTO brand_documents
+         (user_id, document_key, original_filename, file_size, content_type, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        doc.userId,
+        doc.documentKey,
+        doc.originalFilename,
+        doc.fileSize,
+        doc.contentType,
+        doc.status,
+        doc.createdAt,
+        doc.updatedAt
+      ).run();
+
+      this.logger.info(`Brand document created: ${doc.documentKey}`);
+      return result.meta.last_row_id as number;
+    } catch (error: any) {
+      this.logger.error(`Failed to create brand document`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete brand document record
+   */
+  async deleteBrandDocument(userId: string, documentId: number): Promise<void> {
+    try {
+      await this.db.prepare(
+        `DELETE FROM brand_documents
+         WHERE id = ? AND user_id = ?`
+      ).bind(documentId, userId).run();
+
+      this.logger.info(`Deleted brand document: ${documentId} for user: ${userId}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to delete brand document: ${documentId}`, error);
       throw error;
     }
   }

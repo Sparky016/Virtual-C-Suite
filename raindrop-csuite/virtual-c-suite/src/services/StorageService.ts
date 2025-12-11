@@ -28,6 +28,10 @@ export class StorageService {
         return this.bucket.list(options);
     }
 
+    async delete(key: string): Promise<void> {
+        return this.bucket.delete(key);
+    }
+
     // Abstraction for SmartBucket specific methods (casting to any internally if needed, or assuming interface extension)
     async search(query: string, page: number = 1, pageSize: number = 10, requestId?: string): Promise<StorageSearchResult> {
         const smartBucket = this.bucket as any;

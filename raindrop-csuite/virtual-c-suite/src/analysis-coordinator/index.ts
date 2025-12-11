@@ -179,7 +179,13 @@ app.post('/api/ceo-chat', async (c) => {
     }
 
     const aiService = new AIOrchestrationService(c.env.AI, (c.env as any).POSTHOG_API_KEY);
-    const response = await aiService.executeCEOChat(messages, requestId, userId);
+    const response = await aiService.executeCEOChat(
+      messages,
+      requestId,
+      userId,
+      c.env.TRACKING_DB,
+      c.env.INPUT_BUCKET
+    );
 
     return c.json({
       success: response.success,
@@ -215,7 +221,13 @@ app.post('/api/ceo-chat/stream', async (c) => {
         const aiService = new AIOrchestrationService(c.env.AI, (c.env as any).POSTHOG_API_KEY);
 
         // Stream events as they occur
-        for await (const event of aiService.executeCEOChatStream(messages, requestId, userId)) {
+        for await (const event of aiService.executeCEOChatStream(
+          messages,
+          requestId,
+          userId,
+          c.env.TRACKING_DB,
+          c.env.INPUT_BUCKET
+        )) {
           await stream.write(`data: ${JSON.stringify(event)}\n\n`);
         }
 
