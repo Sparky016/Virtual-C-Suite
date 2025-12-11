@@ -66,6 +66,11 @@ export interface CEOChatResult {
   success: boolean;
 }
 
+export interface CEOChatStreamEvent {
+  type: 'decision' | 'consultation' | 'synthesis_start' | 'synthesis_chunk' | 'synthesis_complete' | 'complete' | 'error';
+  data?: any;
+}
+
 export class AIOrchestrationService {
   private aiClient: any;
   private posthogKey?: string;
@@ -411,6 +416,528 @@ export class AIOrchestrationService {
         totalDuration,
         attempts: 0,
         success: false
+      };
+    }
+  }
+
+  /**
+   * Execute CEO chat with board consultation (Streaming version)
+   * Yields events as processing progresses
+   */
+  async *executeCEOChatStream(
+    messages: { role: string; content: string }[],
+    requestId: string,
+    userId: string
+  ): AsyncGenerator<CEOChatStreamEvent> {
+    const startTime = Date.now();
+    let consultedExecutives: ('CFO' | 'CMO' | 'COO')[] = [];
+    let consultationDuration = 0;
+
+    try {
+      // Get the latest user message
+      const userMessages = messages.filter(m => m.role === 'user');
+      const latestUserMessage = userMessages[userMessages.length - 1]?.content || '';
+
+      if (!latestUserMessage) {
+        throw new Error('No user message found');
+      }
+
+      // STEP 1: Decision - Determine which board members to consult
+      const decisionStartTime = Date.now();
+      const decision = await this.decideBoardConsultation(latestUserMessage, userId, requestId);
+      const decisionDuration = Date.now() - decisionStartTime;
+
+      consultedExecutives = decision.executives;
+
+      // Yield decision event
+      yield {
+        type: 'decision',
+        data: {
+          consultedExecutives,
+          reasoning: decision.reasoning,
+          duration: decisionDuration
+        }
+      };
+
+      // STEP 2: Parallel Execution - Consult selected executives (if any)
+      let boardAdvice: { role: string; advice: string }[] = [];
+
+      if (consultedExecutives.length > 0) {
+        const consultationStartTime = Date.now();
+
+        // Format conversation history (exclude the latest message as it's passed separately)
+        const conversationHistory = this.formatConversationHistory(messages.slice(0, -1));
+
+        // Execute consultations and stream results as they complete
+        const consultationPromises = consultedExecutives.map(exec => {
+          switch (exec) {
+            case 'CFO':
+              return this.consultCFO(conversationHistory, latestUserMessage);
+            case 'CMO':
+              return this.consultCMO(conversationHistory, latestUserMessage);
+            case 'COO':
+              return this.consultCOO(conversationHistory, latestUserMessage);
+          }
+        });
+
+        // Wait for consultations and yield results as they complete
+        const consultations: ExecutiveConsultation[] = [];
+        for (const promise of consultationPromises) {
+          const consultation = await promise;
+          consultations.push(consultation);
+
+          // Yield consultation event
+          yield {
+            type: 'consultation',
+            data: {
+              role: consultation.role,
+              advice: consultation.advice,
+              duration: consultation.duration,
+              success: consultation.success
+            }
+          };
+
+          // Track each consultation
+          if (this.posthogKey && consultation.success) {
+            trackAIPerformance(
+              this.posthogKey,
+              userId,
+              `${consultation.role}_CHAT`,
+              consultation.duration,
+              consultation.attempts,
+              consultation.success,
+              { request_id: requestId },
+              this.environment
+            );
+          }
+        }
+
+        consultationDuration = Date.now() - consultationStartTime;
+
+        // Build board advice array (filter out failed consultations)
+        boardAdvice = consultations
+          .filter(c => c.success)
+          .map(c => ({
+            role: c.role,
+            advice: c.advice
+          }));
+      }
+
+      // STEP 3: Synthesis - CEO generates final response (with token streaming)
+      const conversationHistory = this.formatConversationHistory(messages.slice(0, -1));
+
+      // Yield synthesis start event
+      yield {
+        type: 'synthesis_start',
+        data: {}
+      };
+
+      let reply = '';
+      let synthesisAttempts = 1;
+
+      try {
+        // Stream the CEO response token by token
+        const stream = await this.aiClient.run(this.model, {
+          messages: [{
+            role: 'user',
+            content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice)
+          }],
+          temperature: 0.7,
+          max_tokens: 1000,
+          stream: true
+        });
+
+        console.log('Stream type:', typeof stream, 'Is async iterable:', stream[Symbol.asyncIterator] !== undefined);
+
+        // Check if stream is a ReadableStream (Cloudflare Workers AI format)
+        if (stream instanceof ReadableStream || (stream && typeof stream.getReader === 'function')) {
+          const reader = stream.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+
+              // Parse SSE format (Server-Sent Events)
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6); // Remove 'data: ' prefix
+
+                  if (data === '[DONE]') continue;
+
+                  try {
+                    const parsed = JSON.parse(data);
+
+                    // Extract content from OpenAI-style streaming format
+                    if (parsed.choices && parsed.choices[0]?.delta?.content) {
+                      const token = parsed.choices[0].delta.content;
+                      reply += token;
+
+                      // Yield each token as it arrives
+                      yield {
+                        type: 'synthesis_chunk',
+                        data: {
+                          token,
+                          accumulated: reply
+                        }
+                      };
+                    }
+                  } catch (parseError) {
+                    // Skip malformed JSON
+                    console.warn('Failed to parse SSE chunk:', data);
+                  }
+                }
+              }
+            }
+          } finally {
+            reader.releaseLock();
+          }
+        } else if (stream && stream[Symbol.asyncIterator]) {
+          // Handle async iterable format
+          for await (const chunk of stream) {
+            let token = '';
+
+            // Handle different chunk formats
+            if (typeof chunk === 'string') {
+              token = chunk;
+            } else if (chunk.response) {
+              token = chunk.response;
+            } else if (chunk.choices && chunk.choices[0]?.delta?.content) {
+              token = chunk.choices[0].delta.content;
+            }
+
+            if (token) {
+              reply += token;
+
+              // Yield each token as it arrives
+              yield {
+                type: 'synthesis_chunk',
+                data: {
+                  token,
+                  accumulated: reply
+                }
+              };
+            }
+          }
+        } else {
+          // Not a stream - handle as single response
+          throw new Error('Response is not a stream');
+        }
+
+        if (!reply) {
+          throw new Error('No response generated');
+        }
+
+        // Yield synthesis complete event
+        yield {
+          type: 'synthesis_complete',
+          data: {
+            reply
+          }
+        };
+
+      } catch (streamError) {
+        console.error('Streaming synthesis failed, falling back to non-streaming:', streamError);
+
+        // Fallback to non-streaming if streaming fails
+        const synthesisResult = await retryAICall(
+          this.aiClient,
+          this.model,
+          {
+            model: this.model,
+            messages: [{
+              role: 'user',
+              content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice)
+            }],
+            temperature: 0.7,
+            max_tokens: 1000
+          },
+          undefined,
+          'CEO Chat Synthesis Fallback'
+        );
+
+        if (!synthesisResult.success) {
+          throw new Error('CEO synthesis failed');
+        }
+
+        reply = synthesisResult.data?.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
+        synthesisAttempts = synthesisResult.attempts;
+
+        // Yield the complete response
+        yield {
+          type: 'synthesis_complete',
+          data: {
+            reply
+          }
+        };
+      }
+
+      const totalDuration = Date.now() - startTime;
+
+      // Track overall CEO chat performance
+      if (this.posthogKey) {
+        trackAIPerformance(
+          this.posthogKey,
+          userId,
+          'CEO_CHAT_STREAM',
+          totalDuration,
+          synthesisAttempts,
+          true,
+          {
+            request_id: requestId,
+            message_count: messages.length,
+            consulted_executives: consultedExecutives.join(','),
+            consultation_duration_ms: consultationDuration,
+            streaming: true
+          },
+          this.environment
+        );
+
+        trackEvent(
+          this.posthogKey,
+          userId,
+          AnalyticsEvents.CEO_SYNTHESIS_COMPLETED,
+          {
+            request_id: requestId,
+            duration_ms: totalDuration,
+            consulted_executives: consultedExecutives.join(','),
+            had_consultation: consultedExecutives.length > 0,
+            streaming: true
+          },
+          this.environment
+        );
+      }
+
+      // Yield completion event with metadata
+      yield {
+        type: 'complete',
+        data: {
+          success: true,
+          consultedExecutives,
+          consultationDuration: consultedExecutives.length > 0 ? consultationDuration : undefined,
+          totalDuration,
+          attempts: synthesisAttempts
+        }
+      };
+
+    } catch (error) {
+      const totalDuration = Date.now() - startTime;
+
+      console.error('CEO chat stream error:', error);
+
+      // Fallback: Direct CEO response without consultation
+      try {
+        console.log('Attempting fallback CEO response without consultation');
+
+        // Yield synthesis start
+        yield {
+          type: 'synthesis_start',
+          data: {}
+        };
+
+        // Try streaming fallback first
+        try {
+          const stream = await this.aiClient.run(this.model, {
+            messages: [
+              { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
+              ...messages
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+            stream: true
+          });
+
+          let reply = '';
+
+          // Handle ReadableStream format (Cloudflare Workers AI)
+          if (stream instanceof ReadableStream || (stream && typeof stream.getReader === 'function')) {
+            const reader = stream.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Parse SSE format (Server-Sent Events)
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const data = line.slice(6); // Remove 'data: ' prefix
+
+                    if (data === '[DONE]') continue;
+
+                    try {
+                      const parsed = JSON.parse(data);
+
+                      // Extract content from OpenAI-style streaming format
+                      if (parsed.choices && parsed.choices[0]?.delta?.content) {
+                        const token = parsed.choices[0].delta.content;
+                        reply += token;
+
+                        yield {
+                          type: 'synthesis_chunk',
+                          data: {
+                            token,
+                            accumulated: reply
+                          }
+                        };
+                      }
+                    } catch (parseError) {
+                      // Skip malformed JSON
+                      console.warn('Failed to parse SSE chunk:', data);
+                    }
+                  }
+                }
+              }
+            } finally {
+              reader.releaseLock();
+            }
+          } else if (stream && stream[Symbol.asyncIterator]) {
+            // Handle async iterable format
+            for await (const chunk of stream) {
+              let token = '';
+
+              if (typeof chunk === 'string') {
+                token = chunk;
+              } else if (chunk.response) {
+                token = chunk.response;
+              } else if (chunk.choices && chunk.choices[0]?.delta?.content) {
+                token = chunk.choices[0].delta.content;
+              }
+
+              if (token) {
+                reply += token;
+
+                yield {
+                  type: 'synthesis_chunk',
+                  data: {
+                    token,
+                    accumulated: reply
+                  }
+                };
+              }
+            }
+          }
+
+          // Track fallback performance
+          if (this.posthogKey) {
+            trackAIPerformance(
+              this.posthogKey,
+              userId,
+              'CEO_CHAT_STREAM_FALLBACK',
+              totalDuration,
+              1,
+              true,
+              { request_id: requestId, streaming: true },
+              this.environment
+            );
+          }
+
+          // Yield synthesis complete event
+          yield {
+            type: 'synthesis_complete',
+            data: {
+              reply
+            }
+          };
+
+          // Yield completion event
+          yield {
+            type: 'complete',
+            data: {
+              success: true,
+              consultedExecutives: [],
+              totalDuration,
+              attempts: 1
+            }
+          };
+
+          return;
+
+        } catch (streamFallbackError) {
+          console.error('Streaming fallback failed, trying non-streaming:', streamFallbackError);
+
+          // Non-streaming fallback
+          const fallbackResult = await retryAICall(
+            this.aiClient,
+            this.model,
+            {
+              model: this.model,
+              messages: [
+                { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
+                ...messages
+              ],
+              temperature: 0.7,
+              max_tokens: 1000
+            },
+            undefined,
+            'CEO Chat Fallback Non-Stream'
+          );
+
+          if (fallbackResult.success) {
+            const reply = fallbackResult.data?.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
+
+            // Track fallback performance
+            if (this.posthogKey) {
+              trackAIPerformance(
+                this.posthogKey,
+                userId,
+                'CEO_CHAT_STREAM_FALLBACK_NON_STREAM',
+                totalDuration,
+                fallbackResult.attempts,
+                true,
+                { request_id: requestId, streaming: false },
+                this.environment
+              );
+            }
+
+            // Yield synthesis complete event with fallback response
+            yield {
+              type: 'synthesis_complete',
+              data: {
+                reply
+              }
+            };
+
+            // Yield completion event
+            yield {
+              type: 'complete',
+              data: {
+                success: true,
+                consultedExecutives: [],
+                totalDuration,
+                attempts: fallbackResult.attempts
+              }
+            };
+
+            return;
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Fallback CEO response also failed:', fallbackError);
+      }
+
+      // Ultimate fallback - yield error
+      yield {
+        type: 'error',
+        data: {
+          error: 'CEO chat failed',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          totalDuration
+        }
       };
     }
   }

@@ -2,6 +2,7 @@ import { Service } from '@liquidmetal-ai/raindrop-framework';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { stream } from 'hono/streaming';
 import { BucketListOptions } from '@liquidmetal-ai/raindrop-framework';
 import { Env } from './raindrop.gen';
 import { StorageService } from '../services/StorageService';
@@ -194,6 +195,45 @@ app.post('/api/ceo-chat', async (c) => {
     console.error('CEO chat error:', error);
     return c.json({
       error: 'CEO chat failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// CEO Chat (Streaming version with Server-Sent Events)
+app.post('/api/ceo-chat/stream', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { messages, requestId = 'chat-' + Date.now(), userId = 'anonymous' } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return c.json({ error: 'messages array is required' }, 400);
+    }
+
+    return stream(c, async (stream) => {
+      try {
+        const aiService = new AIOrchestrationService(c.env.AI, (c.env as any).POSTHOG_API_KEY);
+
+        // Stream events as they occur
+        for await (const event of aiService.executeCEOChatStream(messages, requestId, userId)) {
+          await stream.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+
+        // Signal completion
+        await stream.write('data: [DONE]\n\n');
+      } catch (error) {
+        console.error('CEO chat stream error:', error);
+        await stream.write(`data: ${JSON.stringify({
+          type: 'error',
+          error: 'CEO chat failed',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        })}\n\n`);
+      }
+    });
+  } catch (error) {
+    console.error('CEO chat stream setup error:', error);
+    return c.json({
+      error: 'CEO chat stream failed',
       message: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }

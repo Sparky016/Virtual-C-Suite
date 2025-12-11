@@ -260,7 +260,7 @@ export async function shutdownAnalytics(apiKey: string | undefined): Promise<voi
 export function trackAIPerformance(
   apiKey: string | undefined,
   userId: string,
-  role: 'CFO' | 'CMO' | 'COO' | 'CEO' | 'CEO_CHAT' | 'CFO_CHAT' | 'CMO_CHAT' | 'COO_CHAT' | 'CEO_CHAT_FALLBACK',
+  role: 'CFO' | 'CMO' | 'COO' | 'CEO' | 'CEO_CHAT' | 'CFO_CHAT' | 'CMO_CHAT' | 'COO_CHAT' | 'CEO_CHAT_FALLBACK' | 'CEO_CHAT_STREAM' | 'CEO_CHAT_STREAM_FALLBACK' | 'CEO_CHAT_STREAM_FALLBACK_NON_STREAM',
   durationMs: number,
   attempts: number,
   success: boolean,
