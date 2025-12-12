@@ -84,7 +84,6 @@ export class AIOrchestrationService {
   private aiBinding: any; // Keep original binding for fallback/default
   private posthogKey?: string;
   private environment?: string;
-  private model: string = 'llama-3.3-70b';
   private db?: SqlDatabase; // Add DB access for settings lookup
 
   constructor(aiBinding: any, posthogKey?: string, environment?: string, db?: SqlDatabase) {
@@ -95,6 +94,20 @@ export class AIOrchestrationService {
   }
 
   private userSettings?: any; // To cache settings
+
+  /**
+   * Get the appropriate model based on the provider
+   */
+  private getModelForProvider(provider: AIProvider): string {
+    if (provider instanceof VultrProvider) {
+      return 'deepseek-r1-distill-llama-70b';
+    } else if (provider instanceof SambaNovaProvider) {
+      return 'Meta-Llama-3.3-70B-Instruct';
+    } else {
+      // Cloudflare or default
+      return '@cf/meta/llama-3-8b-instruct';
+    }
+  }
 
   private async getProvider(userId: string): Promise<AIProvider> {
     // 1. Enforce Authentication
@@ -146,38 +159,50 @@ export class AIOrchestrationService {
 
   /**
    * Ingest file content into Vultr Vector Store if Vultr is the active provider
+   * This allows the CEO chat to reference uploaded documents for context
    */
   async ingestFileIntoVectorStore(userId: string, content: string, filename: string): Promise<void> {
     const provider = await this.getProvider(userId);
 
     // Only proceed if provider is Vultr
-    if (provider instanceof VultrProvider && this.userSettings) {
-      try {
-        let collectionId = this.userSettings.vultr_rag_collection_id;
+    if (!(provider instanceof VultrProvider)) {
+      console.log(`Skipping RAG ingestion - provider is not Vultr (user: ${userId})`);
+      return;
+    }
 
-        // 1. Create collection if it doesn't exist
-        if (!collectionId) {
-          console.log(`Creating Vultr Vector Store for user: ${userId}`);
-          collectionId = await provider.createVectorStore(`Raindrop-Context-${userId}`);
+    if (!this.userSettings) {
+      console.warn(`Skipping RAG ingestion - no user settings found (user: ${userId})`);
+      return;
+    }
 
-          // Save new collection ID to settings
-          if (this.db) {
-            const dbService = new DatabaseService(this.db, new LoggerService(this.posthogKey, this.environment));
-            // Update settings object
-            this.userSettings.vultr_rag_collection_id = collectionId;
-            // Persist to DB
-            await dbService.saveUserSettings(this.userSettings);
-          }
+    try {
+      let collectionId = this.userSettings.vultr_rag_collection_id;
+
+      // 1. Create collection if it doesn't exist
+      if (!collectionId) {
+        console.log(`[RAG] Creating new Vultr Vector Store for user: ${userId}`);
+        collectionId = await provider.createVectorStore(`Raindrop-Context-${userId}`);
+        console.log(`[RAG] Created collection: ${collectionId}`);
+
+        // Save new collection ID to settings
+        if (this.db) {
+          const dbService = new DatabaseService(this.db, new LoggerService(this.posthogKey, this.environment));
+          // Update settings object
+          this.userSettings.vultr_rag_collection_id = collectionId;
+          // Persist to DB
+          await dbService.saveUserSettings(this.userSettings);
+          console.log(`[RAG] Saved collection ID to user settings`);
         }
-
-        // 2. Add item to collection
-        console.log(`Ingesting ${filename} into Vector Store: ${collectionId}`);
-        await provider.addVectorStoreItem(collectionId, content, filename);
-
-      } catch (error) {
-        console.error('Failed to ingest file into Vultr Vector Store:', error);
-        // Don't fail the main process, just log error
       }
+
+      // 2. Add item to collection with metadata
+      console.log(`[RAG] Ingesting document into collection ${collectionId}: ${filename} (${content.length} chars)`);
+      await provider.addVectorStoreItem(collectionId, content, filename);
+      console.log(`[RAG] Successfully ingested ${filename} - now available for CEO chat context`);
+
+    } catch (error) {
+      console.error('[RAG] Failed to ingest file into Vultr Vector Store:', error);
+      throw error; // Re-throw to let caller handle
     }
   }
 
@@ -186,16 +211,19 @@ export class AIOrchestrationService {
    */
   private async runAI(
     userId: string,
-    model: string,
     options: any,
     context?: string
   ): Promise<RetryResult<any>> {
     const provider = await this.getProvider(userId);
+    const model = this.getModelForProvider(provider);
 
     // Inject RAG collection ID if available and provider is Vultr
     if (this.userSettings?.vultr_rag_collection_id && provider instanceof VultrProvider) {
       options.collectionId = this.userSettings.vultr_rag_collection_id;
     }
+
+    // Set the model in options
+    options.model = model;
 
     return retryAICall(
       provider,
@@ -231,13 +259,13 @@ export class AIOrchestrationService {
 
     // Check for failures
     if (!cfoResult.success || !cmoResult.success || !cooResult.success) {
-      const failedRoles = [
-        !cfoResult.success ? 'CFO' : null,
-        !cmoResult.success ? 'CMO' : null,
-        !cooResult.success ? 'COO' : null
+      const failedDetails = [
+        !cfoResult.success ? `CFO: ${cfoResult.error?.message || 'Unknown error'}` : null,
+        !cmoResult.success ? `CMO: ${cmoResult.error?.message || 'Unknown error'}` : null,
+        !cooResult.success ? `COO: ${cooResult.error?.message || 'Unknown error'}` : null
       ].filter(Boolean);
 
-      throw new Error(`AI analysis failed for: ${failedRoles.join(', ')}`);
+      throw new Error(`AI analysis failed - ${failedDetails.join('; ')}`);
     }
 
     return {
@@ -260,9 +288,7 @@ export class AIOrchestrationService {
 
     const ceoResult = await this.runAI(
       request.userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCEOSynthesisPrompt(cfoAnalysis, cmoAnalysis, cooAnalysis) }],
         temperature: 0.8,
         max_tokens: 1000
@@ -421,9 +447,7 @@ export class AIOrchestrationService {
 
       const synthesisResult = await this.runAI(
         userId,
-        this.model,
         {
-          model: this.model,
           messages: [{
             role: 'user',
             content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice, brandContext)
@@ -494,11 +518,12 @@ export class AIOrchestrationService {
       try {
         console.log('Attempting fallback CEO response without consultation');
 
+        const fallbackModel = '@cf/meta/llama-3-8b-instruct'; // Use Cloudflare default for fallback
         const fallbackResult = await retryAICall(
           this.aiBinding,
-          this.model,
+          fallbackModel,
           {
-            model: this.model,
+            model: fallbackModel,
             messages: [
               { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
               ...messages
@@ -677,8 +702,9 @@ export class AIOrchestrationService {
 
       try {
         // Stream the CEO response token by token
+        const model = this.getModelForProvider(provider);
         const chatOptions: any = {
-          model: this.model,
+          model,
           messages: [{
             role: 'user',
             content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice, brandContext)
@@ -861,8 +887,9 @@ export class AIOrchestrationService {
 
         // Try streaming fallback first
         try {
+          const model = this.getModelForProvider(provider);
           const stream = await provider.chat({
-            model: this.model,
+            model,
             messages: [
               { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
               ...messages
@@ -1010,9 +1037,7 @@ export class AIOrchestrationService {
   private async executeCFOAnalysis(fileContent: string, userId: string = 'anonymous'): Promise<RetryResult<any>> {
     return this.runAI(
       userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCFOPrompt(fileContent) }],
         temperature: 0.7,
         max_tokens: 800
@@ -1024,9 +1049,7 @@ export class AIOrchestrationService {
   private async executeCMOAnalysis(fileContent: string, userId: string = 'anonymous'): Promise<RetryResult<any>> {
     return this.runAI(
       userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCMOPrompt(fileContent) }],
         temperature: 0.7,
         max_tokens: 800
@@ -1038,9 +1061,7 @@ export class AIOrchestrationService {
   private async executeCOOAnalysis(fileContent: string, userId: string = 'anonymous'): Promise<RetryResult<any>> {
     return this.runAI(
       userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCOOPrompt(fileContent) }],
         temperature: 0.7,
         max_tokens: 800
@@ -1099,9 +1120,7 @@ export class AIOrchestrationService {
     try {
       const result = await this.runAI(
         userId,
-        this.model,
         {
-          model: this.model,
           messages: [{ role: 'user', content: getBoardConsultationDecisionPrompt(userMessage) }],
           temperature: 0.3, // Low temperature for consistent decision-making
           max_tokens: 200
@@ -1149,9 +1168,7 @@ export class AIOrchestrationService {
   ): Promise<ExecutiveConsultation> {
     const result = await this.runAI(
       userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCFOChatPrompt(conversationHistory, userQuestion) }],
         temperature: 0.7,
         max_tokens: 400
@@ -1178,9 +1195,7 @@ export class AIOrchestrationService {
   ): Promise<ExecutiveConsultation> {
     const result = await this.runAI(
       userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCMOChatPrompt(conversationHistory, userQuestion) }],
         temperature: 0.7,
         max_tokens: 400
@@ -1207,9 +1222,7 @@ export class AIOrchestrationService {
   ): Promise<ExecutiveConsultation> {
     const result = await this.runAI(
       userId,
-      this.model,
       {
-        model: this.model,
         messages: [{ role: 'user', content: getCOOChatPrompt(conversationHistory, userQuestion) }],
         temperature: 0.7,
         max_tokens: 400

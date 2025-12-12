@@ -94,6 +94,7 @@ export class StatusService {
       progress,
       createdAt: new Date(request.created_at).toISOString(),
       completedAt: request.completed_at ? new Date(request.completed_at).toISOString() : undefined,
+      error: request.error_message,
       timedOut: false
     };
   }

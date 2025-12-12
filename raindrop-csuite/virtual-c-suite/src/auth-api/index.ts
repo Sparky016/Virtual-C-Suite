@@ -233,6 +233,79 @@ app.post('/auth/logout', async (c) => {
     }
 });
 
+// Admin endpoint to list all user settings (for debugging/admin purposes)
+app.get('/admin/user-settings', async (c) => {
+    try {
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+        const { DatabaseService } = await import('../services/Database/DatabaseService');
+
+        const dbService = new DatabaseService(c.env.TRACKING_DB, logger);
+        const allSettings = await dbService.getAllUserSettings();
+
+        // Sanitize API keys - only show if they are set, not the actual values
+        const sanitized = allSettings.map(settings => ({
+            user_id: settings.user_id,
+            inference_provider: settings.inference_provider,
+            vultr_api_key: settings.vultr_api_key ? '[SET]' : null,
+            sambanova_api_key: settings.sambanova_api_key ? '[SET]' : null,
+            elevenlabs_api_key: settings.elevenlabs_api_key ? '[SET]' : null,
+            vultr_rag_collection_id: settings.vultr_rag_collection_id,
+            updated_at: settings.updated_at,
+            updated_at_iso: new Date(settings.updated_at).toISOString()
+        }));
+
+        return c.json({
+            total: sanitized.length,
+            settings: sanitized
+        });
+
+    } catch (error: any) {
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+        logger.error('Failed to get all user settings', error);
+
+        return c.json({
+            error: 'Failed to retrieve user settings',
+            message: error.message
+        }, 500);
+    }
+});
+
+// Admin endpoint to clear all user settings (for testing/admin purposes)
+app.delete('/admin/user-settings', async (c) => {
+    try {
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+
+        // Get count before deletion
+        const countBefore = await c.env.TRACKING_DB.prepare(
+            'SELECT COUNT(*) as count FROM user_settings'
+        ).first();
+
+        const count = (countBefore as any)?.count || 0;
+
+        logger.warn(`Clearing all user settings - ${count} records will be deleted`);
+
+        // Delete all user settings
+        await c.env.TRACKING_DB.prepare('DELETE FROM user_settings').run();
+
+        logger.info(`Successfully cleared ${count} user settings`);
+
+        return c.json({
+            success: true,
+            message: 'All user settings cleared',
+            deleted_count: count
+        });
+
+    } catch (error: any) {
+        const logger = new LoggerService(c.env.POSTHOG_API_KEY, c.env.NODE_ENV);
+        logger.error('Failed to clear user settings', error);
+
+        return c.json({
+            error: 'Failed to clear user settings',
+            message: error.message
+        }, 500);
+    }
+});
+
 export default class extends Service<Env> {
     async fetch(request: Request): Promise<Response> {
         return app.fetch(request, this.env);

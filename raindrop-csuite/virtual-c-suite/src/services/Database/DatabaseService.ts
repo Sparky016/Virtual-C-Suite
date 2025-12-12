@@ -381,5 +381,30 @@ export class DatabaseService {
       throw error;
     }
   }
+
+  /**
+   * Get all user settings (for admin purposes)
+   */
+  async getAllUserSettings(): Promise<UserSettings[]> {
+    try {
+      const result = await this.db.prepare(
+        `SELECT
+          user_id,
+          inference_provider,
+          vultr_api_key,
+          sambanova_api_key,
+          elevenlabs_api_key,
+          vultr_rag_collection_id,
+          updated_at
+         FROM user_settings
+         ORDER BY updated_at DESC`
+      ).all();
+
+      return result.results as unknown as UserSettings[];
+    } catch (error: any) {
+      this.logger.error(`Failed to get all user settings`, error);
+      throw error;
+    }
+  }
 }
 

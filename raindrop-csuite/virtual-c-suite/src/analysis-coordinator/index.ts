@@ -476,6 +476,36 @@ app.post('/api/settings', async (c) => {
       updated_at: Date.now()
     };
 
+    // 4. Smart provider inference: If user provides a key but no explicit provider, infer the provider
+    if (!incomingSettings.inference_provider) {
+      // User didn't explicitly set provider, infer from keys provided
+      if (incomingSettings.sambanova_api_key || incomingSettings.samba_nova_api_key) {
+        mergedSettings.inference_provider = 'sambanova';
+      } else if (incomingSettings.vultr_api_key) {
+        mergedSettings.inference_provider = 'vultr';
+      }
+      // If cloudflare is set explicitly or no keys provided, keep default (vultr) or existing
+    }
+
+    // 5. Validate that the selected provider has the required API key
+    const provider = mergedSettings.inference_provider;
+    if (provider === 'vultr' && !mergedSettings.vultr_api_key) {
+      return c.json({
+        error: 'Missing API key',
+        message: 'Vultr provider requires a vultr_api_key. Please provide your Vultr API key or switch to a different provider.',
+        provider: 'vultr',
+        field: 'vultr_api_key'
+      }, 400);
+    }
+    if (provider === 'sambanova' && !mergedSettings.sambanova_api_key) {
+      return c.json({
+        error: 'Missing API key',
+        message: 'SambaNova provider requires a sambanova_api_key. Please provide your SambaNova API key or switch to a different provider.',
+        provider: 'sambanova',
+        field: 'sambanova_api_key'
+      }, 400);
+    }
+
     // Ensure strictly typed object for the service call
     const finalSettings = {
       user_id: mergedSettings.user_id,

@@ -78,8 +78,15 @@ export default class extends Each<BucketEventNotification, Env> {
       // Execute Executive Analyses (CFO, CMO, COO)
       const executives = await aiService.executeExecutiveAnalyses({ fileContent, requestId, userId });
 
-      // Ingest into Vector Store (Fire and Forget)
-      aiService.ingestFileIntoVectorStore(userId, fileContent, event.object.key);
+      // Ingest into Vector Store (for CEO chat context)
+      try {
+        logger.info(`Attempting to ingest file into RAG collection for user: ${userId}`);
+        await aiService.ingestFileIntoVectorStore(userId, fileContent, event.object.key);
+        logger.info(`Successfully ingested file into RAG collection`);
+      } catch (ragError) {
+        logger.error('RAG ingestion failed (non-fatal)', ragError);
+        // Don't fail the entire process if RAG ingestion fails
+      }
 
       // Save individual analyses
       const analysisCreatedAt = Date.now();

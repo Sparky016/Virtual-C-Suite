@@ -36,7 +36,7 @@ describe('SambaNovaProvider', () => {
             });
 
             const options = {
-                model: 'Meta-Llama-3.1-70B-Instruct',
+                model: 'Meta-Llama-3.3-70B-Instruct',
                 messages: [{ role: 'user', content: 'Hello' }],
                 temperature: 0.7,
                 max_tokens: 100

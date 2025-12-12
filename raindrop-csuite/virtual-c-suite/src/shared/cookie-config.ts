@@ -10,8 +10,8 @@
 
 export const COOKIE_OPTIONS = {
     httpOnly: true,      // Prevents JavaScript access via document.cookie
-    secure: process.env.NODE_ENV === 'production',  // HTTPS only in production
-    sameSite: 'Lax' as const,  // Lax is recommended for general auth flows
+    secure: true,        // HTTPS only (required for sameSite: None)
+    sameSite: 'None' as const,  // Required for cross-site cookies (frontend on Netlify, backend on Raindrop)
     path: '/',           // Cookie available for entire domain
     maxAge: 432000,      // 5 days in seconds (matches session cookie duration)
 };
