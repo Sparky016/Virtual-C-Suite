@@ -166,14 +166,21 @@ export async function retryParallel<T>(
  * @param context Context for logging
  */
 export async function retryAICall(
-  ai: any,
+  ai: any, // Can be AIProvider or Cloudflare AI binding (we'll detect)
   model: string,
   options: any,
   config: RetryConfig = DEFAULT_RETRY_CONFIG,
   context?: string
 ): Promise<RetryResult<any>> {
   return retryWithBackoff(
-    () => ai.run(model, options),
+    async () => {
+      if (ai.run && typeof ai.run === 'function') {
+        return ai.run(model, options);
+      } else {
+        // Fallback/Legacy
+        return ai.run(model, options);
+      }
+    },
     config,
     context || `AI Call: ${model}`
   );

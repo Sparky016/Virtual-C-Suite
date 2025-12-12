@@ -31,6 +31,16 @@ export interface ProgressInfo {
   synthesis: 'completed' | 'pending';
 }
 
+export interface UserSettings {
+  user_id: string;
+  inference_provider: 'vultr' | 'sambanova' | 'cloudflare';
+  vultr_api_key?: string;
+  sambanova_api_key?: string;
+  elevenlabs_api_key?: string;
+  vultr_rag_collection_id?: string;
+  updated_at: number;
+}
+
 export class DatabaseService {
   private db: SqlDatabase;
   private logger: LoggerService;
@@ -306,6 +316,68 @@ export class DatabaseService {
       this.logger.info(`Deleted brand document: ${documentId} for user: ${userId}`);
     } catch (error: any) {
       this.logger.error(`Failed to delete brand document: ${documentId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user settings
+   */
+  async getUserSettings(userId: string): Promise<UserSettings | null> {
+    try {
+      const result = await this.db.prepare(
+        `SELECT
+          user_id,
+          inference_provider,
+          vultr_api_key,
+          sambanova_api_key,
+          elevenlabs_api_key,
+          vultr_rag_collection_id,
+          updated_at
+         FROM user_settings
+         WHERE user_id = ?`
+      ).bind(userId).first();
+
+      if (!result) {
+        return null;
+      }
+
+      return result as unknown as UserSettings;
+    } catch (error: any) {
+      this.logger.error(`Failed to get user settings: ${userId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save user settings
+   */
+  async saveUserSettings(settings: UserSettings): Promise<void> {
+    this.logger.info(`Saving user settings: ${settings.user_id}`);
+    try {
+      await this.db.prepare(
+        `INSERT INTO user_settings (user_id, inference_provider, vultr_api_key, sambanova_api_key, elevenlabs_api_key, vultr_rag_collection_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+          inference_provider = excluded.inference_provider,
+          vultr_api_key = excluded.vultr_api_key,
+          sambanova_api_key = excluded.sambanova_api_key,
+          elevenlabs_api_key = excluded.elevenlabs_api_key,
+          vultr_rag_collection_id = excluded.vultr_rag_collection_id,
+          updated_at = excluded.updated_at`
+      ).bind(
+        settings.user_id,
+        settings.inference_provider,
+        settings.vultr_api_key || null,
+        settings.sambanova_api_key || null,
+        settings.elevenlabs_api_key || null,
+        settings.vultr_rag_collection_id || null,
+        settings.updated_at
+      ).run();
+
+      this.logger.info(`User settings saved for: ${settings.user_id}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to save user settings: ${settings.user_id}`, error);
       throw error;
     }
   }
