@@ -17,6 +17,10 @@ type MockCache = {
   get: any;
 };
 
+type MockDb = {
+  prepare: any;
+};
+
 describe('Analysis Coordinator Service', () => {
   const createEnv = () => {
     const mockInputBucket: MockBucket = {
@@ -33,14 +37,20 @@ describe('Analysis Coordinator Service', () => {
       get: vi.fn(),
     };
 
+    const mockDb: MockDb = {
+      prepare: vi.fn(),
+    };
+
     return {
       env: {
         INPUT_BUCKET: mockInputBucket,
         mem: mockCache,
+        TRACKING_DB: mockDb,
       } as unknown as Env,
       mocks: {
         bucket: mockInputBucket,
         cache: mockCache,
+        db: mockDb,
       }
     };
   };
@@ -202,6 +212,75 @@ describe('Analysis Coordinator Service', () => {
         console.error('get cache miss failed (status ' + response.status + '):', await response.text());
       }
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('User Settings', () => {
+    test('post settings with partial update and typo correction', async () => {
+      const { env, mocks } = createEnv();
+
+      // Mock existing settings response
+      const existingSettings = {
+        user_id: 'test-user-123',
+        inference_provider: 'vultr',
+        vultr_api_key: 'old-key',
+        updated_at: 1000
+      };
+
+      mocks.db.prepare.mockImplementation((query: string) => {
+        // Mock getUserSettings query
+        if (query.includes('SELECT') && query.includes('user_settings')) {
+          return {
+            bind: () => ({
+              first: async () => existingSettings
+            })
+          };
+        }
+        // Mock saveUserSettings query
+        if (query.includes('INSERT INTO user_settings')) {
+          return {
+            bind: (...args: any[]) => ({
+              run: async () => ({ meta: { last_row_id: 1 } })
+            })
+          };
+        }
+        return { bind: () => ({ run: async () => { }, first: async () => null, all: async () => [] }) };
+      });
+
+      const payload = {
+        settings: {
+          user_id: 'test-user-123',
+          samba_nova_api_key: 'new-samba-key' // Typo here to test correction
+        }
+      };
+
+      const request = new Request('http://localhost/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const response = await app.fetch(request, env);
+
+      if (response.status !== 200) {
+        console.error('post settings failed:', await response.text());
+      }
+      expect(response.status).toBe(200);
+
+      const body: any = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.settings).toBeDefined();
+
+      // Verify typo correction
+      expect(body.settings.sambanova_api_key).toBe('new-samba-key');
+
+      // Verify partial update (merged with existing)
+      expect(body.settings.inference_provider).toBe('vultr');
+      expect(body.settings.vultr_api_key).toBe('old-key');
+      expect(body.settings.user_id).toBe('test-user-123');
+
+      // Verify updated_at is new
+      expect(body.settings.updated_at).toBeGreaterThan(1000);
     });
   });
 });

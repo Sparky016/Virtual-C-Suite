@@ -16,6 +16,11 @@ import { SqlDatabase, Bucket } from '@liquidmetal-ai/raindrop-framework';
 import { DatabaseService } from './Database/DatabaseService';
 import { StorageService } from './StorageService';
 import { LoggerService } from './Logger/LoggerService';
+import { AIProvider } from './AI/AIProvider';
+import { VultrProvider } from './AI/VultrProvider';
+import { SambaNovaProvider } from './AI/SambaNovaProvider';
+import { CloudflareProvider } from './AI/CloudflareProvider';
+import { AI_PROVIDERS, AI_ERRORS } from '../constants/ai-constants';
 
 export interface AIAnalysisRequest {
   fileContent: string;
@@ -76,15 +81,129 @@ export interface CEOChatStreamEvent {
 }
 
 export class AIOrchestrationService {
-  private aiClient: any;
+  private aiBinding: any; // Keep original binding for fallback/default
   private posthogKey?: string;
   private environment?: string;
   private model: string = 'llama-3.3-70b';
+  private db?: SqlDatabase; // Add DB access for settings lookup
 
-  constructor(aiClient: any, posthogKey?: string, environment?: string) {
-    this.aiClient = aiClient;
+  constructor(aiBinding: any, posthogKey?: string, environment?: string, db?: SqlDatabase) {
+    this.aiBinding = aiBinding;
     this.posthogKey = posthogKey;
     this.environment = environment;
+    this.db = db;
+  }
+
+  private userSettings?: any; // To cache settings
+
+  private async getProvider(userId: string): Promise<AIProvider> {
+    // 1. Enforce Authentication
+    if (!userId || userId === 'anonymous') {
+      throw new Error(AI_ERRORS.ANONYMOUS_NOT_ALLOWED);
+    }
+
+    if (!this.db) {
+      throw new Error('Database connection required for AI provider settings.');
+    }
+
+    try {
+      const dbService = new DatabaseService(this.db, new LoggerService(this.posthogKey, this.environment));
+      const settings = await dbService.getUserSettings(userId);
+      this.userSettings = settings;
+
+      if (settings) {
+        if (settings.inference_provider === AI_PROVIDERS.VULTR) {
+          if (!settings.vultr_api_key) {
+            throw new Error(AI_ERRORS.MISSING_VULTR_KEY);
+          }
+          return new VultrProvider(settings.vultr_api_key);
+        }
+
+        if (settings.inference_provider === AI_PROVIDERS.SAMBANOVA) {
+          if (!settings.sambanova_api_key) {
+            throw new Error(AI_ERRORS.MISSING_SAMBANOVA_KEY);
+          }
+          return new SambaNovaProvider(settings.sambanova_api_key);
+        }
+
+        if (settings.inference_provider === AI_PROVIDERS.CLOUDFLARE) {
+          return new CloudflareProvider(this.aiBinding);
+        }
+      }
+
+      // If we reach here, no valid provider configuration was found
+      throw new Error(AI_ERRORS.INVALID_PROVIDER_CONFIG);
+
+    } catch (e: any) {
+      console.error('Error fetching/configuring AI provider:', e);
+      // Propagate specific authentication/configuration errors
+      if (Object.values(AI_ERRORS).includes(e.message)) {
+        throw e;
+      }
+      throw new Error(AI_ERRORS.INVALID_PROVIDER_CONFIG);
+    }
+  }
+
+  /**
+   * Ingest file content into Vultr Vector Store if Vultr is the active provider
+   */
+  async ingestFileIntoVectorStore(userId: string, content: string, filename: string): Promise<void> {
+    const provider = await this.getProvider(userId);
+
+    // Only proceed if provider is Vultr
+    if (provider instanceof VultrProvider && this.userSettings) {
+      try {
+        let collectionId = this.userSettings.vultr_rag_collection_id;
+
+        // 1. Create collection if it doesn't exist
+        if (!collectionId) {
+          console.log(`Creating Vultr Vector Store for user: ${userId}`);
+          collectionId = await provider.createVectorStore(`Raindrop-Context-${userId}`);
+
+          // Save new collection ID to settings
+          if (this.db) {
+            const dbService = new DatabaseService(this.db, new LoggerService(this.posthogKey, this.environment));
+            // Update settings object
+            this.userSettings.vultr_rag_collection_id = collectionId;
+            // Persist to DB
+            await dbService.saveUserSettings(this.userSettings);
+          }
+        }
+
+        // 2. Add item to collection
+        console.log(`Ingesting ${filename} into Vector Store: ${collectionId}`);
+        await provider.addVectorStoreItem(collectionId, content, filename);
+
+      } catch (error) {
+        console.error('Failed to ingest file into Vultr Vector Store:', error);
+        // Don't fail the main process, just log error
+      }
+    }
+  }
+
+  /**
+   * Helper to run AI call with correct provider
+   */
+  private async runAI(
+    userId: string,
+    model: string,
+    options: any,
+    context?: string
+  ): Promise<RetryResult<any>> {
+    const provider = await this.getProvider(userId);
+
+    // Inject RAG collection ID if available and provider is Vultr
+    if (this.userSettings?.vultr_rag_collection_id && provider instanceof VultrProvider) {
+      options.collectionId = this.userSettings.vultr_rag_collection_id;
+    }
+
+    return retryAICall(
+      provider,
+      model,
+      options,
+      undefined,
+      context
+    );
   }
 
   /**
@@ -97,9 +216,9 @@ export class AIOrchestrationService {
 
     // SCATTER: Parallel AI calls with retry logic
     const [cfoResult, cmoResult, cooResult] = await Promise.all([
-      this.executeCFOAnalysis(request.fileContent),
-      this.executeCMOAnalysis(request.fileContent),
-      this.executeCOOAnalysis(request.fileContent)
+      this.executeCFOAnalysis(request.fileContent, request.userId),
+      this.executeCMOAnalysis(request.fileContent, request.userId),
+      this.executeCOOAnalysis(request.fileContent, request.userId)
     ]);
 
     const duration = Date.now() - startTime;
@@ -139,8 +258,8 @@ export class AIOrchestrationService {
   ): Promise<CEOSynthesis> {
     const startTime = Date.now();
 
-    const ceoResult = await retryAICall(
-      this.aiClient,
+    const ceoResult = await this.runAI(
+      request.userId,
       this.model,
       {
         model: this.model,
@@ -148,7 +267,6 @@ export class AIOrchestrationService {
         temperature: 0.8,
         max_tokens: 1000
       },
-      undefined,
       'CEO Synthesis'
     );
 
@@ -265,7 +383,8 @@ export class AIOrchestrationService {
         const consultations = await this.executeExecutiveConsultations(
           consultedExecutives,
           conversationHistory,
-          latestUserMessage
+          latestUserMessage,
+          userId
         );
 
         consultationDuration = Date.now() - consultationStartTime;
@@ -300,8 +419,8 @@ export class AIOrchestrationService {
 
       const conversationHistory = this.formatConversationHistory(messages.slice(0, -1));
 
-      const synthesisResult = await retryAICall(
-        this.aiClient,
+      const synthesisResult = await this.runAI(
+        userId,
         this.model,
         {
           model: this.model,
@@ -312,7 +431,6 @@ export class AIOrchestrationService {
           temperature: 0.7,
           max_tokens: 1000
         },
-        undefined,
         'CEO Chat Synthesis'
       );
 
@@ -377,7 +495,7 @@ export class AIOrchestrationService {
         console.log('Attempting fallback CEO response without consultation');
 
         const fallbackResult = await retryAICall(
-          this.aiClient,
+          this.aiBinding,
           this.model,
           {
             model: this.model,
@@ -446,8 +564,10 @@ export class AIOrchestrationService {
     const startTime = Date.now();
     let consultedExecutives: ('CFO' | 'CMO' | 'COO')[] = [];
     let consultationDuration = 0;
+    let provider: AIProvider = new CloudflareProvider(this.aiBinding);
 
     try {
+      provider = await this.getProvider(userId);
       // Get the latest user message
       const userMessages = messages.filter(m => m.role === 'user');
       const latestUserMessage = userMessages[userMessages.length - 1]?.content || '';
@@ -557,7 +677,8 @@ export class AIOrchestrationService {
 
       try {
         // Stream the CEO response token by token
-        const stream = await this.aiClient.run(this.model, {
+        const chatOptions: any = {
+          model: this.model,
           messages: [{
             role: 'user',
             content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice, brandContext)
@@ -565,7 +686,13 @@ export class AIOrchestrationService {
           temperature: 0.7,
           max_tokens: 1000,
           stream: true
-        });
+        };
+
+        if (this.userSettings?.vultr_rag_collection_id && provider instanceof VultrProvider) {
+          chatOptions.collectionId = this.userSettings.vultr_rag_collection_id;
+        }
+
+        const stream = await provider.chat(chatOptions);
 
         console.log('Stream type:', typeof stream, 'Is async iterable:', stream[Symbol.asyncIterator] !== undefined);
 
@@ -664,39 +791,9 @@ export class AIOrchestrationService {
         };
 
       } catch (streamError) {
-        console.error('Streaming synthesis failed, falling back to non-streaming:', streamError);
-
-        // Fallback to non-streaming if streaming fails
-        const synthesisResult = await retryAICall(
-          this.aiClient,
-          this.model,
-          {
-            model: this.model,
-            messages: [{
-              role: 'user',
-              content: getCEOChatSynthesisPrompt(conversationHistory, latestUserMessage, boardAdvice)
-            }],
-            temperature: 0.7,
-            max_tokens: 1000
-          },
-          undefined,
-          'CEO Chat Synthesis Fallback'
-        );
-
-        if (!synthesisResult.success) {
-          throw new Error('CEO synthesis failed');
-        }
-
-        reply = synthesisResult.data?.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
-        synthesisAttempts = synthesisResult.attempts;
-
-        // Yield the complete response
-        yield {
-          type: 'synthesis_complete',
-          data: {
-            reply
-          }
-        };
+        // Log error but don't fallback to non-streaming
+        console.error('Streaming synthesis failed:', streamError);
+        throw streamError;
       }
 
       const totalDuration = Date.now() - startTime;
@@ -764,7 +861,8 @@ export class AIOrchestrationService {
 
         // Try streaming fallback first
         try {
-          const stream = await this.aiClient.run(this.model, {
+          const stream = await provider.chat({
+            model: this.model,
             messages: [
               { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
               ...messages
@@ -888,85 +986,30 @@ export class AIOrchestrationService {
           return;
 
         } catch (streamFallbackError) {
-          console.error('Streaming fallback failed, trying non-streaming:', streamFallbackError);
-
-          // Non-streaming fallback
-          const fallbackResult = await retryAICall(
-            this.aiClient,
-            this.model,
-            {
-              model: this.model,
-              messages: [
-                { role: 'system', content: "You are the CEO of my company with my company's best interest at heart." },
-                ...messages
-              ],
-              temperature: 0.7,
-              max_tokens: 1000
-            },
-            undefined,
-            'CEO Chat Fallback Non-Stream'
-          );
-
-          if (fallbackResult.success) {
-            const reply = fallbackResult.data?.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
-
-            // Track fallback performance
-            if (this.posthogKey) {
-              trackAIPerformance(
-                this.posthogKey,
-                userId,
-                'CEO_CHAT_STREAM_FALLBACK_NON_STREAM',
-                totalDuration,
-                fallbackResult.attempts,
-                true,
-                { request_id: requestId, streaming: false },
-                this.environment
-              );
-            }
-
-            // Yield synthesis complete event with fallback response
-            yield {
-              type: 'synthesis_complete',
-              data: {
-                reply
-              }
-            };
-
-            // Yield completion event
-            yield {
-              type: 'complete',
-              data: {
-                success: true,
-                consultedExecutives: [],
-                totalDuration,
-                attempts: fallbackResult.attempts
-              }
-            };
-
-            return;
-          }
+          console.error('Streaming fallback failed:', streamFallbackError);
         }
+
+        // Ultimate fallback - yield error
+        yield {
+          type: 'error',
+          data: {
+            error: 'CEO chat failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            totalDuration
+          }
+        };
       } catch (fallbackError) {
         console.error('Fallback CEO response also failed:', fallbackError);
       }
-
-      // Ultimate fallback - yield error
-      yield {
-        type: 'error',
-        data: {
-          error: 'CEO chat failed',
-          message: error instanceof Error ? error.message : 'Unknown error',
-          totalDuration
-        }
-      };
     }
+
   }
 
   // Private helper methods
 
-  private async executeCFOAnalysis(fileContent: string): Promise<RetryResult<any>> {
-    return retryAICall(
-      this.aiClient,
+  private async executeCFOAnalysis(fileContent: string, userId: string = 'anonymous'): Promise<RetryResult<any>> {
+    return this.runAI(
+      userId,
       this.model,
       {
         model: this.model,
@@ -974,14 +1017,13 @@ export class AIOrchestrationService {
         temperature: 0.7,
         max_tokens: 800
       },
-      undefined,
       'CFO Analysis'
     );
   }
 
-  private async executeCMOAnalysis(fileContent: string): Promise<RetryResult<any>> {
-    return retryAICall(
-      this.aiClient,
+  private async executeCMOAnalysis(fileContent: string, userId: string = 'anonymous'): Promise<RetryResult<any>> {
+    return this.runAI(
+      userId,
       this.model,
       {
         model: this.model,
@@ -989,14 +1031,13 @@ export class AIOrchestrationService {
         temperature: 0.7,
         max_tokens: 800
       },
-      undefined,
       'CMO Analysis'
     );
   }
 
-  private async executeCOOAnalysis(fileContent: string): Promise<RetryResult<any>> {
-    return retryAICall(
-      this.aiClient,
+  private async executeCOOAnalysis(fileContent: string, userId: string = 'anonymous'): Promise<RetryResult<any>> {
+    return this.runAI(
+      userId,
       this.model,
       {
         model: this.model,
@@ -1004,7 +1045,6 @@ export class AIOrchestrationService {
         temperature: 0.7,
         max_tokens: 800
       },
-      undefined,
       'COO Analysis'
     );
   }
@@ -1057,8 +1097,8 @@ export class AIOrchestrationService {
     requestId: string
   ): Promise<BoardConsultationDecision> {
     try {
-      const result = await retryAICall(
-        this.aiClient,
+      const result = await this.runAI(
+        userId,
         this.model,
         {
           model: this.model,
@@ -1066,7 +1106,6 @@ export class AIOrchestrationService {
           temperature: 0.3, // Low temperature for consistent decision-making
           max_tokens: 200
         },
-        undefined,
         'Board Consultation Decision'
       );
 
@@ -1105,10 +1144,11 @@ export class AIOrchestrationService {
    */
   private async consultCFO(
     conversationHistory: string,
-    userQuestion: string
+    userQuestion: string,
+    userId: string = 'anonymous'
   ): Promise<ExecutiveConsultation> {
-    const result = await retryAICall(
-      this.aiClient,
+    const result = await this.runAI(
+      userId,
       this.model,
       {
         model: this.model,
@@ -1116,7 +1156,6 @@ export class AIOrchestrationService {
         temperature: 0.7,
         max_tokens: 400
       },
-      undefined,
       'CFO Consultation'
     );
 
@@ -1134,10 +1173,11 @@ export class AIOrchestrationService {
    */
   private async consultCMO(
     conversationHistory: string,
-    userQuestion: string
+    userQuestion: string,
+    userId: string = 'anonymous'
   ): Promise<ExecutiveConsultation> {
-    const result = await retryAICall(
-      this.aiClient,
+    const result = await this.runAI(
+      userId,
       this.model,
       {
         model: this.model,
@@ -1145,7 +1185,6 @@ export class AIOrchestrationService {
         temperature: 0.7,
         max_tokens: 400
       },
-      undefined,
       'CMO Consultation'
     );
 
@@ -1163,10 +1202,11 @@ export class AIOrchestrationService {
    */
   private async consultCOO(
     conversationHistory: string,
-    userQuestion: string
+    userQuestion: string,
+    userId: string = 'anonymous'
   ): Promise<ExecutiveConsultation> {
-    const result = await retryAICall(
-      this.aiClient,
+    const result = await this.runAI(
+      userId,
       this.model,
       {
         model: this.model,
@@ -1174,7 +1214,6 @@ export class AIOrchestrationService {
         temperature: 0.7,
         max_tokens: 400
       },
-      undefined,
       'COO Consultation'
     );
 
@@ -1193,7 +1232,8 @@ export class AIOrchestrationService {
   private async executeExecutiveConsultations(
     executives: ('CFO' | 'CMO' | 'COO')[],
     conversationHistory: string,
-    userQuestion: string
+    userQuestion: string,
+    userId: string = 'anonymous'
   ): Promise<ExecutiveConsultation[]> {
     if (executives.length === 0) {
       return [];
@@ -1202,11 +1242,11 @@ export class AIOrchestrationService {
     const consultationPromises = executives.map(exec => {
       switch (exec) {
         case 'CFO':
-          return this.consultCFO(conversationHistory, userQuestion);
+          return this.consultCFO(conversationHistory, userQuestion, userId);
         case 'CMO':
-          return this.consultCMO(conversationHistory, userQuestion);
+          return this.consultCMO(conversationHistory, userQuestion, userId);
         case 'COO':
-          return this.consultCOO(conversationHistory, userQuestion);
+          return this.consultCOO(conversationHistory, userQuestion, userId);
       }
     });
 

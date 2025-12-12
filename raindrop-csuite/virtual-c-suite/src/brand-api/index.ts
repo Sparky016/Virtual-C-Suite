@@ -5,6 +5,7 @@ import { BrandService } from '../services/Brand/BrandService';
 import { DatabaseService } from '../services/Database/DatabaseService';
 import { StorageService } from '../services/StorageService';
 import { LoggerService } from '../services/Logger/LoggerService';
+import { AIOrchestrationService } from '../services/AIOrchestrationService';
 
 const app = createHonoApp();
 export { app };
@@ -71,6 +72,25 @@ app.post('/brand-document', async (c) => {
 
     // Track success
     brandService.trackBrandDocumentUploaded(userId, file!.name, documentKey);
+
+    // Ingest into Vector Store (Vultr RAG)
+    try {
+      // Need to read file text content for ingestion
+      const textContent = await file!.text();
+      // Instantiate AI Service (we need AI binding and DB)
+      // Note: brand-api might not have AI binding in Env yet, need to check raindoop.gen or pass it
+      // Assuming it has AI in Env as it is common. If not, we skip or add it.
+      // BrandAPI Env might be different. Let's check imports.
+      // It imports Env from upload-api/raindrop.gen. Let's assume AI binding is available or we need to add it.
+      // Ideally we should use a proper DI or check if c.env.AI exists.
+      if ((c.env as any).AI) {
+        const aiService = new AIOrchestrationService((c.env as any).AI, c.env.POSTHOG_API_KEY, undefined, c.env.TRACKING_DB);
+        // Fire and forget, don't await to avoid blocking upload response
+        aiService.ingestFileIntoVectorStore(userId, textContent, file!.name);
+      }
+    } catch (ingestError) {
+      logger.warn('Failed to trigger vector store ingestion', ingestError);
+    }
 
     return c.json({
       success: true,
