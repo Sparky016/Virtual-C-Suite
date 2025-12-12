@@ -1,0 +1,333 @@
+﻿
+> virtual-c-suite@1.0.0 test
+> vitest run src/services/AIOrchestrationService.test.ts should yield error event
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/ruanc/source/repos/Virtual C-Suite/raindrop-csuite/virtual-c-suite[39m
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mProvider Selection & Authentication[2m > [22m[2mshould select SambaNovaProvider when configured
+[22m[39mParallel AI analysis completed in 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mProvider Selection & Authentication[2m > [22m[2mshould select CloudflareProvider when explicitly configured
+[22m[39mParallel AI analysis completed in 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteExecutiveAnalyses[2m > [22m[2mshould execute all 3 analyses in parallel and return results
+[22m[39mParallel AI analysis completed in 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteExecutiveAnalyses[2m > [22m[2mshould inject RAG collection ID if Vultr and configured
+[22m[39mParallel AI analysis completed in 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteExecutiveAnalyses[2m > [22m[2mshould throw error if any analysis fails
+[22m[39mParallel AI analysis completed in 1ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2morchestrateAnalysis[2m > [22m[2mshould coordinate full flow and return success result
+[22m[39mParallel AI analysis completed in 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould make decision AND consult board members AND synthesize
+[22m[39mNo active brand document found for user: user123
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould make decision AND consult board members AND synthesize
+[22m[39mBoard consultation decision: CFO - Money logic
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould make decision AND consult board members AND synthesize
+[22m[39mBoard consultation decision took 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould make decision AND consult board members AND synthesize
+[22m[39mExecutive consultations completed in 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould handle fallback if chat errors occur
+[22m[39mNo active brand document found for user: user123
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould handle fallback if chat errors occur
+[22m[39mBoard consultation decision took 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould return ultimate failure if fallback also fails
+[22m[39mNo active brand document found for user: user123
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould return ultimate failure if fallback also fails
+[22m[39mBoard consultation decision took 0ms
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChat[2m > [22m[2mshould return ultimate failure if fallback also fails
+[22m[39mAttempting fallback CEO response without consultation
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield decision, consultation, and synthesis events
+[22m[39mNo active brand document found for user: user123
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield decision, consultation, and synthesis events
+[22m[39mBoard consultation decision: CMO - Ads
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield decision, consultation, and synthesis events
+[22m[39mAttempting fallback CEO response without consultation
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield error event if streaming fails
+[22m[39mNo active brand document found for user: user123
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield error event if streaming fails
+[22m[39mAttempting fallback CEO response without consultation
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield error event if streaming fails
+[22m[39mDEBUG: Reached catch streamFallbackError
+DEBUG: Yielding error event now
+
+[90mstdout[2m | src/services/AIOrchestrationService.test.ts[2m > [22m[2mAIOrchestrationService[2m > [22m[2mexecuteCEOChatStream[2m > [22m[2mshould yield error event if streaming fails
+[22m[39m[TEST] Captured Events: [
+  {
+    "type": "decision",
+    "data": {
+      "consultedExecutives": [],
+      "reasoning": "Invalid response format - CEO will respond directly",
+      "duration": 0
+    }
+  },
+  {
+    "type": "synthesis_start",
+    "data": {}
+  },
+  {
+    "type": "synthesis_start",
+    "data": {}
+  },
+  {
+    "type": "error",
+    "data": {
+      "error": "CEO chat failed",
+      "message": "Stream failed",
+      "totalDuration": 0
+    }
+  }
+]
+
+ [31mÔØ»[39m src/services/AIOrchestrationService.test.ts [2m([22m[2m26 tests[22m[2m | [22m[31m7 failed[39m[2m)[22m[32m 33[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mConstructor[2m > [22mshould initialize with provided dependencies[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mConstructor[2m > [22mshould handle optional params being undefined[32m 0[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould throw error for anonymous user[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould throw error if DB is missing[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould select VultrProvider when configured[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould throw error if Vultr key is missing[32m 5[2mms[22m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould select SambaNovaProvider when configured[39m[32m 2[2mms[22m[39m
+[31m     ÔåÆ Cannot read properties of undefined (reading '0')[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould throw error if SambaNova key is missing[32m 1[2mms[22m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould select CloudflareProvider when explicitly configured[39m[32m 1[2mms[22m[39m
+[31m     ÔåÆ Cannot read properties of undefined (reading '0')[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mProvider Selection & Authentication[2m > [22mshould throw error for invalid provider config[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mingestFileIntoVectorStore[2m > [22mshould do nothing if provider is not Vultr[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mingestFileIntoVectorStore[2m > [22mshould create collection and add item if Vultr is active and no collection exists[39m[32m 1[2mms[22m[39m
+[31m     ÔåÆ expected "spy" to be called with arguments: [ 'Raindrop-Context-user123' ][90m
+
+Number of calls: [1m0[22m
+[31m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mingestFileIntoVectorStore[2m > [22mshould just add item if collection already exists[39m[32m 1[2mms[22m[39m
+[31m     ÔåÆ expected "spy" to be called with arguments: [ Array(3) ][90m
+
+Number of calls: [1m0[22m
+[31m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mingestFileIntoVectorStore[2m > [22mshould handle errors gracefully (log only)[39m[32m 1[2mms[22m[39m
+[31m     ÔåÆ expected "error" to be called with arguments: [ StringContaining{ÔÇª}, Any<Error> ][90m
+
+Number of calls: [1m0[22m
+[31m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteExecutiveAnalyses[2m > [22mshould execute all 3 analyses in parallel and return results[32m 1[2mms[22m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mexecuteExecutiveAnalyses[2m > [22mshould inject RAG collection ID if Vultr and configured[39m[32m 4[2mms[22m[39m
+[31m     ÔåÆ expected "spy" to be called with arguments: [ Any<Object>, Any<String>, ÔÇª(3) ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   Any<Object>,[90m
+[32m-   Any<String>,[90m
+[32m-   ObjectContaining {[90m
+[32m-     "collectionId": "rag-123",[90m
+[31m+   {[90m
+[31m+     "addVectorStoreItem": [Function spy],[90m
+[31m+     "chat": [Function spy],[90m
+[31m+     "createVectorStore": [Function spy],[90m
+[31m+     "run": [Function spy],[90m
+[31m+   },[90m
+[31m+   "llama-3.3-70b",[90m
+[31m+   {[90m
+[31m+     "max_tokens": 800,[90m
+[31m+     "messages": [[90m
+[31m+       {[90m
+[31m+         "content": "BUSINESS DATA:[90m
+[31m+ f[90m
+[31m+[90m
+[31m+ ### SYSTEM PROMPT: CFO_AGENT[90m
+[31m+[90m
+[31m+ **ROLE:**[90m
+[31m+ You are the \"Ruthless CFO\" for a Small/Medium Enterprise (SME). Your sole priority is the financial health, liquidity, and survival of the business. You are risk-averse, quantitative, and blunt.[90m
+[31m+[90m
+[31m+ **OBJECTIVE:**[90m
+[31m+ Analyze the provided business data (sales logs, expenses, CSV exports) to identify cash flow risks, margin leaks, and financial inefficiencies.[90m
+[31m+[90m
+[31m+ **INSTRUCTIONS:**[90m
+[31m+ 1.  **Analyze Margins:** Identify which specific products/services are generating the lowest profit margins or losing money. Explicitly name them.[90m
+[31m+ 2.  **Cash Flow Security:** Highlight any trends indicating a cash crunch (e.g., rising costs vs. flat revenue).[90m
+[31m+ 3.  **Cost Control:** Identify the largest expense categories and recommend immediate cuts.[90m
+[31m+ 4.  **Data Integrity:** If the data provided is insufficient to calculate a metric (e.g., missing cost data), flag this gap immediately as a \"Financial Blindspot.\"[90m
+[31m+[90m
+[31m+ **CONSTRAINTS:**[90m
+[31m+ * Do NOT offer marketing advice or operational niceties. Focus only on the numbers.[90m
+[31m+ * Do NOT hallucinate figures. If a number isn't in the text, do not invent it.[90m
+[31m+ * Be concise and stern.[90m
+[31m+ * If you don't have enough data to make a recommendation, flag it as a \"Financial Blindspot.\"[90m
+[31m+[90m
+[31m+ **OUTPUT FORMAT:**[90m
+[31m+ Provide a Markdown response with the following sections:[90m
+[31m+ * **Critical Financial Risks:** (Bulleted list of immediate threats).[90m
+[31m+ * **Margin Killers:** (Specific items/services dragging down profit).[90m
+[31m+ * **The Cut List:** (Specific expenses to reduce or eliminate).[90m
+[31m+ * **Financial Blindspots:** (Data gaps that prevent a complete analysis).[90m
+[31m+ ",[90m
+[31m+         "role": "user",[90m
+[31m+       },[90m
+[31m+     ],[90m
+[31m+     "model": "llama-3.3-70b",[90m
+[31m+     "temperature": 0.7,[90m
+[2m    },[22m
+[2m    undefined,[22m
+[32m-   Any<String>,[90m
+[31m+   "CFO Analysis",[90m
+[2m  ][22m
+
+[1m  2nd spy call:
+
+[22m[2m  [[22m
+[32m-   Any<Object>,[90m
+[32m-   Any<String>,[90m
+[32m-   ObjectContaining {[90m
+[32m-     "collectionId": "rag-123",[90m
+[31m+   {[90m
+[31m+     "addVectorStoreItem": [Function spy],[90m
+[31m+     "chat": [Function spy],[90m
+[31m+     "createVectorStore": [Function spy],[90m
+[31m+     "run": [Function spy],[90m
+[31m+   },[90m
+[31m+   "llama-3.3-70b",[90m
+[31m+   {[90m
+[31m+     "max_tokens": 800,[90m
+[31m+     "messages": [[90m
+[31m+       {[90m
+[31m+         "content": "BUSINESS DATA:[90m
+[31m+ f[90m
+[31m+[90m
+[31m+ ### SYSTEM PROMPT: CMO_AGENT[90m
+[31m+[90m
+[31m+ **ROLE:**[90m
+[31m+ You are the \"Creative CMO\" for a Small/Medium Enterprise (SME). Your sole priority is growth, brand visibility, and increasing revenue. You are optimistic, customer-centric, and opportunistic.[90m
+[31m+[90m
+[31m+ **OBJECTIVE:**[90m
+[31m+ Analyze the provided business data to identify sales opportunities, customer preferences, and products that deserve more promotion.[90m
+[31m+[90m
+[31m+ **INSTRUCTIONS:**[90m
+[31m+ 1.  **Identify Winners:** Determine which items/services are selling best or have the highest potential demand.[90m
+[31m+ 2.  **Customer Insights:** Infer customer behavior from the data (e.g., \"Customers buy X with Y,\" or \"Sales dip on Tuesdays\").[90m
+[31m+ 3.  **Growth Strategy:** Suggest low-cost, high-impact marketing actions (e.g., bundles, email campaigns, social angles) based on the data.[90m
+[31m+ 4.  **Product Pivot:** Recommend specific items to feature or \"hero\" immediately.[90m
+[31m+ 5.  **Data Integrity:** If the data provided is insufficient to calculate a metric (e.g., missing cost data), flag this gap immediately as a \"Marketing Blindspot.\"[90m
+[31m+[90m
+[31m+ **CONSTRAINTS:**[90m
+[31m+ * Focus on SME-friendly strategies (low budget, guerrilla marketing). Do not suggest expensive TV ads or massive PR firms.[90m
+[31m+ * Do not worry about operational difficulty; assume if it sells, the company should do it.[90m
+[31m+ * Base enthusiasm on the provided data trends.[90m
+[31m+ * If you don't have enough data to make a recommendation, flag it as a \"Marketing Blindspot.\"[90m
+[31m+[90m
+[31m+ **OUTPUT FORMAT:**[90m
+[31m+ Provide a Markdown response with the following sections:[90m
+[31m+ * **Growth Opportunities:** (Bulleted list of revenue levers).[90m
+[31m+ * **Hero Products:** (Items to promote immediately).[90m
+[31m+ * **Campaign Idea:** (One specific, actionable marketing tactic to try this week).[90m
+[31m+ * **Customer Insights:** (Bulleted list of customer behavior insights).[90m
+[31m+ * **Marketing Blindspots:** (Data gaps that prevent a complete analysis).[90m
+[31m+ ",[90m
+[31m+         "role": "user",[90m
+[31m+       },[90m
+[31m+     ],[90m
+[31m+     "model": "llama-3.3-70b",[90m
+[31m+     "temperature": 0.7,[90m
+[2m    },[22m
+[2m    undefined,[22m
+[32m-   Any<String>,[90m
+[31m+   "CMO Analysis",[90m
+[2m  ][22m
+
+[1m  3rd spy call:
+
+[22m[2m  [[22m
+[32m-   Any<Object>,[90m
+[32m-   Any<String>,[90m
+[32m-   ObjectContaining {[90m
+[32m-     "collectionId": "rag-123",[90m
+[31m+   {[90m
+[31m+     "addVectorStoreItem": [Function spy],[90m
+[31m+     "chat": [Function spy],[90m
+[31m+     "createVectorStore": [Function spy],[90m
+[31m+     "run": [Function spy],[90m
+[31m+   },[90m
+[31m+   "llama-3.3-70b",[90m
+[31m+   {[90m
+[31m+     "max_tokens": 800,[90m
+[31m+     "messages": [[90m
+[31m+       {[90m
+[31m+         "content": "BUSINESS DATA:[90m
+[31m+ f[90m
+[31m+[90m
+[31m+ ### SYSTEM PROMPT: COO_AGENT[90m
+[31m+[90m
+[31m+ **ROLE:**[90m
+[31m+ You are the \"Pragmatic COO\" for a Small/Medium Enterprise (SME). Your sole priority is efficiency, execution, and reality. You hate waste and complexity.[90m
+[31m+[90m
+[31m+ **OBJECTIVE:**[90m
+[31m+ Analyze the provided business data to identify inefficiencies, inventory bloat, and operational drag.[90m
+[31m+[90m
+[31m+ **INSTRUCTIONS:**[90m
+[31m+ 1.  **Inventory Analysis:** Identify \"dead stock\"ÔÇöitems that are taking up space/resources but not moving.[90m
+[31m+ 2.  **Process Bottlenecks:** Look for patterns suggesting inefficiencies (e.g., returns, inconsistent sales volumes, high labor indications).[90m
+[31m+ 3.  **Simplification:** Recommend stopping specific activities or selling specific items that complicate operations without adding value.[90m
+[31m+ 4.  **Resource Allocation:** Suggest where the business owner should focus their limited time.[90m
+[31m+ 5.  **Data Integrity:** If the data provided is insufficient to calculate a metric (e.g., missing labor data), flag this gap immediately as a \"Operational Blindspot.\"[90m
+[31m+[90m
+[31m+ **CONSTRAINTS:**[90m
+[31m+ * Balance the CMO's ideas with reality (e.g., if an item sells well but is operationally a nightmare, flag it).[90m
+[31m+ * Focus on \"doing less, better.\"[90m
+[31m+ * Be practical and direct.[90m
+[31m+ * If you don't have enough data to make a recommendation, flag it as a \"Operational Blindspot.\"[90m
+[31m+[90m
+[31m+ **OUTPUT FORMAT:**[90m
+[31m+ Provide a Markdown response with the following sections:[90m
+[31m+ * **Operational Bottlenecks:** (Where the business is slowing down).[90m
+[31m+ * **Dead Weight:** (Inventory or tasks that should be liquidated/stopped).[90m
+[31m+ * **Efficiency Quick Wins:** (Simple process changes to save time).[90m
+[31m+ ",[90m
+[31m+         "role": "user",[90m
+[31m+       },[90m
+[31m+     ],[90m
+[31m+     "model": "llama-3.3-70b",[90m
+[31m+     "temperature": 0.7,[90m
+[2m    },[22m
+[2m    undefined,[22m
+[32m-   Any<String>,[90m
+[31m+   "COO Analysis",[90m
+[2m  ][22m
+[31m[90m
+
+Number of calls: [1m3[22m
+[31m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteExecutiveAnalyses[2m > [22mshould throw error if any analysis fails[32m 2[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteCEOSynthesis[2m > [22mshould execute synthesis successfully[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteCEOSynthesis[2m > [22mshould throw error on synthesis failure[32m 0[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22morchestrateAnalysis[2m > [22mshould coordinate full flow and return success result[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22morchestrateAnalysis[2m > [22mshould return failure result if exceptions occur[32m 0[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteCEOChat[2m > [22mshould make decision AND consult board members AND synthesize[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteCEOChat[2m > [22mshould handle fallback if chat errors occur[32m 1[2mms[22m[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteCEOChat[2m > [22mshould return ultimate failure if fallback also fails[32m 1[2mms[22m[39m
+[31m   [31m├ù[31m AIOrchestrationService[2m > [22mexecuteCEOChatStream[2m > [22mshould yield decision, consultation, and synthesis events[39m[32m 2[2mms[22m[39m
+[31m     ÔåÆ expected undefined to be defined[39m
+   [32mÔ£ô[39m AIOrchestrationService[2m > [22mexecuteCEOChatStream[2m > [22mshould yield error event if streaming fails[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m19 passed[39m[22m[90m (26)[39m
+[2m   Start at [22m 10:08:46
+[2m   Duration [22m 410ms[2m (transform 121ms, setup 0ms, collect 146ms, tests 33ms, environment 0ms, prepare 85ms)[22m
+

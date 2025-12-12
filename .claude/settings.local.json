@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(raindrop --help:*)",
+      "Bash(raindrop build:*)",
+      "Bash(where npx:*)",
+      "Bash(dir /b \"C:\\Users\\ruanc\\Documents\\*.md\")",
+      "Bash(npx vitest:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

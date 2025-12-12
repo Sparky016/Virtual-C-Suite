@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(raindrop --help:*)",
+      "Bash(raindrop mcp:*)",
+      "mcp__raindrop-mcp__get-prompt",
+      "Bash(test:*)",
+      "mcp__raindrop-mcp:*",
+      "mcp__raindrop-mcp__list_documentation_pages",
+      "mcp__raindrop-mcp__fetch_documentation_page",
+      "mcp__raindrop-mcp__list_architecture_patterns",
+      "mcp__raindrop-mcp__fetch_architecture_pattern",
+      "mcp__raindrop-mcp__update-state",
+      "Bash(raindrop build:*)",
+      "Bash(dir:*)",
+      "Bash(tree:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(pnpm run lint)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(npx tsc:*)",
+      "Bash(\"C:\\Program Files\\nodejs\\npx.cmd\" tsc --noEmit)",
+      "Bash(/c/Program Files/nodejs/npx.cmd -y @liquidmetal-ai/raindrop build deploy --start)",
+      "Bash(node --version:*)",
+      "Bash(cmd //c \"raindrop build deploy --start\":*)",
+      "Bash(npm run build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

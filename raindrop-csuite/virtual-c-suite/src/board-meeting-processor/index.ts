@@ -39,7 +39,7 @@ export default class extends Each<BucketEventNotification, Env> {
     const nodeEnv = (this.env as any).NODE_ENV;
     const logger = new LoggerService(this.env.POSTHOG_API_KEY, nodeEnv);
     const dbService = new DatabaseService(this.env.TRACKING_DB, logger);
-    const aiService = new AIOrchestrationService(this.env.AI, this.env.POSTHOG_API_KEY, nodeEnv);
+    const aiService = new AIOrchestrationService(this.env.AI, this.env.POSTHOG_API_KEY, nodeEnv, this.env.TRACKING_DB);
 
     try {
       logger.info(`Processing uploaded file: ${event.object.key}`, {
@@ -77,6 +77,9 @@ export default class extends Each<BucketEventNotification, Env> {
 
       // Execute Executive Analyses (CFO, CMO, COO)
       const executives = await aiService.executeExecutiveAnalyses({ fileContent, requestId, userId });
+
+      // Ingest into Vector Store (Fire and Forget)
+      aiService.ingestFileIntoVectorStore(userId, fileContent, event.object.key);
 
       // Save individual analyses
       const analysisCreatedAt = Date.now();

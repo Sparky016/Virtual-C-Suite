@@ -177,6 +177,70 @@
                     }
                 },
                 {
+                    "name": "Upload Document (Generic)",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/documents",
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                },
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "prefix",
+                                    "value": "optional-folder",
+                                    "type": "text",
+                                    "disabled": true
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Document",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "http://localhost:3001/api/documents/:key",
+                        "variable": [
+                            {
+                                "key": "key",
+                                "value": "FILE_KEY_HERE"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "Manual Ingest Document",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/documents/:key/ingest",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"userId\": \"test-user-id\"\n}"
+                        },
+                        "variable": [
+                            {
+                                "key": "key",
+                                "value": "FILE_KEY_HERE"
+                            }
+                        ]
+                    }
+                },
+                {
                     "name": "Search Documents",
                     "request": {
                         "method": "POST",
@@ -228,6 +292,47 @@
                     }
                 },
                 {
+                    "name": "Get User Settings",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "http://localhost:3001/api/settings?userId=test-user-id",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "3001",
+                            "path": [
+                                "api",
+                                "settings"
+                            ],
+                            "query": [
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Save User Settings",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/settings",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"settings\": {\n        \"user_id\": \"test-user-id\",\n        \"inference_provider\": \"vultr\",\n        \"vultr_api_key\": \"YOUR_KEY\",\n        \"vultr_rag_collection_id\": \"OPTIONAL_COLLECTION_ID\"\n    }\n}"
+                        }
+                    }
+                },
+                {
                     "name": "Cache Put",
                     "request": {
                         "method": "POST",
@@ -262,6 +367,93 @@
                     "request": {
                         "method": "GET",
                         "url": "http://localhost:3001/api/config"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Brand API",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3004/health"
+                    }
+                },
+                {
+                    "name": "Upload Brand Document",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3004/brand-document",
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                },
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id",
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Brand Document",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "http://localhost:3004/brand-document?userId=test-user-id",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "3004",
+                            "path": [
+                                "brand-document"
+                            ],
+                            "query": [
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Brand Document",
+                    "request": {
+                        "method": "DELETE",
+                        "url": {
+                            "raw": "http://localhost:3004/brand-document/:documentId?userId=test-user-id",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "3004",
+                            "path": [
+                                "brand-document",
+                                ":documentId"
+                            ],
+                            "query": [
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id"
+                                }
+                            ],
+                            "variable": [
+                                {
+                                    "key": "documentId",
+                                    "value": "DOC_ID_HERE"
+                                }
+                            ]
+                        }
                     }
                 }
             ]

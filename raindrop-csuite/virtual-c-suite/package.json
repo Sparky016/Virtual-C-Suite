@@ -36,8 +36,10 @@
     "posthog-node": "^5.17.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cookie": "^0.6.0",
     "@vitest/coverage-v8": "^3.2.4",
+    "better-sqlite3": "^12.5.0",
     "cross-env": "^10.1.0",
     "firebase-tools": "^14.27.0",
     "npm-run-all": "^4.1.5",
