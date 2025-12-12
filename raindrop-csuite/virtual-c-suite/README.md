@@ -29,14 +29,63 @@ npm run format           # Format code
 
 ## Overview
 
-The Virtual C-Suite provides a comprehensive dashboard and executive team interface to help with strategic decision-making, performance monitoring, and team management.
+The Virtual C-Suite provides a comprehensive dashboard and executive team interface to help with strategic decision-making, performance monitoring, and team management. It democratizes strategic intelligence for the SME economy by providing an on-demand "Board of Directors" powered by AI.
+
+## Architecture
+
+The system uses a **Scatter-Gather** architecture pattern to parallelize executive analysis, ensuring rapid responses even with complex reasoning models.
+
+```mermaid
+graph TD
+    User([User]) --> Auth[Firebase Authentication]
+    Auth --> UI[Frontend UI (React)]
+    
+    subgraph "Frontend Components"
+        UI --> Chat[Chat Interface]
+        UI --> Board[Boardroom Manager]
+        UI --> Upload[Data Room / Upload]
+        UI --> Brand[Brand Manager]
+    end
+
+    subgraph "Raindrop Service Layer (Liquid Metal)"
+        Upload -->|File Upload| UploadAPI[Upload API]
+        Chat -->|Chat Request| CoordAPI[Analysis Coordinator]
+        
+        UploadAPI --> InputBucket[("📂 Input Bucket")]
+        InputBucket -->|Trigger Event| Observer[("⚡ Raindrop Observer")]
+    end
+
+    subgraph "Vultr Cloud Intelligence"
+        Observer -->|Promise.all (Parallel)| Scatter[Scatter Execution]
+        
+        Scatter -- "Analyzes Finances" --> CFO[("📉 CFO Agent")]
+        Scatter -- "Analyzes Growth" --> CMO[("🚀 CMO Agent")]
+        Scatter -- "Analyzes Ops" --> COO[("⚙️ COO Agent")]
+        
+        CFO & CMO & COO --> Synthesis[("👔 CEO Agent (Synthesis)")]
+    end
+
+    Synthesis --> OutputBucket[("📄 Output Bucket")]
+    OutputBucket --> Board
+    
+    CoordAPI <-->|RAG Context| VectorStore[("🧠 Vultr Vector Store")]
+```
+
+### ⚡ Powered By
+*   **LiquidMetal Raindrop**: Provides the serverless infrastructure, Observers, and MCP (Model Context Protocol).
+*   **Vultr Inference**: Powers the high-speed Llama-3-70b-Instruct models for the agents and RAG capabilities.
+*   **Claude Code**: Accelerating development via AI-assisted coding.
+
+### 🚀 Key Features
+- **Parallel Processing**: Uses `Promise.all()` in the Raindrop Observer to trigger all board members simultaneously, reducing wait times significantly.
+- **RAG Integration**: The Virtual CEO uses Vultr's Vector Store to access your uploaded documents during chat.
+- **Real-World Impact**: Generate printable PDF/Markdown reports to take directly to business meetings or bank appointments.
 
 ## Features
 
-- **Dashboard**: Real-time KPI monitoring with key performance indicators
+- **Dashboard**: A dedicated space to interact with the Virtual CEO Agent, discussing your business and uploaded documents.
 - **Executive Team**: Virtual C-Suite members for consultation and strategic planning
-- **Quick Actions**: Rapid access to common executive functions
-- **Responsive Design**: Works on desktop and mobile devices
+- **Bring Your Own Key (BYOK)**: Supports custom API keys (e.g., Vultr, SambaNova) which are stored encrypted in the database for maximum security.
 
 ## Getting Started
 
@@ -44,6 +93,10 @@ The Virtual C-Suite provides a comprehensive dashboard and executive team interf
 
 - Node.js 18+ installed
 - Raindrop CLI installed (for production deployment)
+- Firebase Account (for authentication)
+- Vultr API Key (for inference)
+- SambaNova API Key (for inference)
+- Claude Code with Raindrop MCP for AI-assisted coding
 
 ### Installation
 
@@ -64,16 +117,18 @@ For local development, use the dev scripts which run the services with hot reloa
 npm run dev:all
 ```
 
-This starts three services in parallel:
+This starts four services in parallel:
 - **upload-api** on port 3000
 - **analysis-coordinator** on port 3001
 - **board-meeting-processor** on port 3002
+- **authentication** on port 3003
 
 **Run individual services:**
 ```bash
 npm run dev:upload      # Upload API only (port 3000)
 npm run dev:coord       # Analysis Coordinator only (port 3001)
 npm run dev:processor   # Board Meeting Processor only (port 3002)
+npm run dev:auth        # Authentication only (port 3003)
 ```
 
 **Note:** Local development uses `@hono/node-server` and runs on Node.js with TypeScript compilation via `tsx`. Changes are automatically reloaded.
@@ -97,21 +152,17 @@ raindrop-csuite/
 ### Dashboard
 
 The dashboard provides:
-- Key performance indicators (Revenue, Active Users, Customer Satisfaction, Team Size)
-- Quick action buttons for common tasks
-- Real-time metrics with trend indicators
+- The frontend React application
 
 ### Executive Team
 
 Access your virtual C-Suite:
 - **CEO**: Strategic vision and company leadership
 - **CFO**: Financial planning and risk management
-- **CTO**: Technology strategy and innovation
 - **CMO**: Marketing strategy and brand development
 - **COO**: Operations and business efficiency
-- **CHRO**: Human resources and talent management
 
-Each executive provides consultation services and detailed profiles.
+Each executive provides consultation to the CEO and can be used to generate reports and documents.
 
 ## API Reference
 
@@ -186,7 +237,7 @@ This application has two distinct runtime environments:
 - **Local Development**: Runs on Node.js using `@hono/node-server` (see `src/*/local.ts` files)
 - **Production**: Runs on Cloudflare Workers via Raindrop platform (see `src/*/index.ts` files)
 
-The separation ensures Node.js-specific code doesn't interfere with the Cloudflare Workers build.
+The separation ensures Node.js-specific code doesn't interfere with the Cloudflare Workers build and the desired stateless architecture.
 
 ### Building for Production
 
