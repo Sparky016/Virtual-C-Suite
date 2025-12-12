@@ -1,4 +1,14 @@
-Product,Revenue,Cost,Units
-Widget A,5000,3000,100
-Widget B,3000,2000,75
-Widget C,8000,4500,150
+Financial Item,Month 1,Month 2,Month 3
+REVENUE:,,,
+Landscaping Projects,12000,18000,25000
+Maintenance Contracts,3000,3500,4000
+Consulting/Workshops,500,700,900
+Total Revenue,15500,22200,29900
+EXPENSES:,,,
+Salaries,5000,6000,7000
+Rent/Utilities,1500,1500,1500
+"Supplies/Inventory (Plants, Soil)",3000,4500,6000
+Marketing,500,700,1000
+Insurance,100,100,100
+Total Expenses,10100,12800,15600
+NET INCOME (Profit/Loss),5400,9400,14300

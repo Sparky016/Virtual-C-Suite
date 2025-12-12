@@ -5,7 +5,7 @@
     },
     "item": [
         {
-            "name": "Auth API",
+            "name": "Auth API (3003)",
             "item": [
                 {
                     "name": "Health Check",
@@ -61,11 +61,25 @@
                         "method": "POST",
                         "url": "http://localhost:3003/auth/logout"
                     }
+                },
+                {
+                    "name": "Admin: List User Settings",
+                    "request": {
+                        "method": "GET",
+                        "url": "http://localhost:3003/admin/user-settings"
+                    }
+                },
+                {
+                    "name": "Admin: Clear User Settings",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "http://localhost:3003/admin/user-settings"
+                    }
                 }
             ]
         },
         {
-            "name": "Upload API",
+            "name": "Upload API (3000)",
             "item": [
                 {
                     "name": "Health Check",
@@ -121,11 +135,52 @@
                             }
                         ]
                     }
+                },
+                {
+                    "name": "Get User Settings",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "http://localhost:3000/api/settings?userId=test-user-id",
+                            "protocol": "http",
+                            "host": [
+                                "localhost"
+                            ],
+                            "port": "3000",
+                            "path": [
+                                "api",
+                                "settings"
+                            ],
+                            "query": [
+                                {
+                                    "key": "userId",
+                                    "value": "test-user-id"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Save User Settings",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3000/api/settings",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"settings\": {\n        \"user_id\": \"test-user-id\",\n        \"inference_provider\": \"vultr\",\n        \"vultr_api_key\": \"YOUR_KEY\"\n    }\n}"
+                        }
+                    }
                 }
             ]
         },
         {
-            "name": "Analysis Coordinator",
+            "name": "Analysis Coordinator (3001)",
             "item": [
                 {
                     "name": "Health Check",
@@ -292,6 +347,23 @@
                     }
                 },
                 {
+                    "name": "CEO Chat Stream",
+                    "request": {
+                        "method": "POST",
+                        "url": "http://localhost:3001/api/ceo-chat/stream",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"messages\": [\n        { \"role\": \"user\", \"content\": \"How can we cut costs?\" }\n    ],\n    \"userId\": \"cxo-123\"\n}"
+                        }
+                    }
+                },
+                {
                     "name": "Get User Settings",
                     "request": {
                         "method": "GET",
@@ -372,7 +444,7 @@
             ]
         },
         {
-            "name": "Brand API",
+            "name": "Brand API (3004)",
             "item": [
                 {
                     "name": "Health Check",
@@ -459,7 +531,7 @@
             ]
         },
         {
-            "name": "Board Meeting Processor",
+            "name": "Board Meeting Processor (3002)",
             "item": [
                 {
                     "name": "Health Check",
