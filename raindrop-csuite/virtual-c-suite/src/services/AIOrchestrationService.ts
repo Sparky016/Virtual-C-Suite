@@ -80,6 +80,63 @@ export interface CEOChatStreamEvent {
   data?: any;
 }
 
+// Helper to filter <think>...</think> tags from a stream of tokens
+class StreamThinkingFilter {
+  private inThinkingBlock = false;
+  private buffer = '';
+
+  process(text: string): string {
+    let output = '';
+    let current = this.buffer + text;
+    this.buffer = '';
+
+    while (current.length > 0) {
+      if (this.inThinkingBlock) {
+        const endTagIndex = current.indexOf('</think>');
+        if (endTagIndex !== -1) {
+          this.inThinkingBlock = false;
+          current = current.slice(endTagIndex + 8);
+        } else {
+          const partialMatch = this.findPartialMatch(current, '</think>');
+          if (partialMatch) {
+            this.buffer = partialMatch;
+            current = '';
+          } else {
+            current = '';
+          }
+        }
+      } else {
+        const startTagIndex = current.indexOf('<think>');
+        if (startTagIndex !== -1) {
+          output += current.slice(0, startTagIndex);
+          this.inThinkingBlock = true;
+          current = current.slice(startTagIndex + 7);
+        } else {
+          const partialMatch = this.findPartialMatch(current, '<think>');
+          if (partialMatch) {
+            output += current.slice(0, current.length - partialMatch.length);
+            this.buffer = partialMatch;
+            current = '';
+          } else {
+            output += current;
+            current = '';
+          }
+        }
+      }
+    }
+    return output;
+  }
+
+  private findPartialMatch(text: string, tag: string): string | null {
+    for (let i = tag.length - 1; i > 0; i--) {
+      if (text.endsWith(tag.slice(0, i))) {
+        return tag.slice(0, i);
+      }
+    }
+    return null;
+  }
+}
+
 export class AIOrchestrationService {
   private aiBinding: any; // Keep original binding for fallback/default
   private posthogKey?: string;
@@ -698,6 +755,7 @@ export class AIOrchestrationService {
       };
 
       let reply = '';
+      const filter = new StreamThinkingFilter();
       let synthesisAttempts = 1;
 
       try {
@@ -751,16 +809,19 @@ export class AIOrchestrationService {
                     // Extract content from OpenAI-style streaming format
                     if (parsed.choices && parsed.choices[0]?.delta?.content) {
                       const token = parsed.choices[0].delta.content;
-                      reply += token;
+                      const filteredToken = filter.process(token);
+                      if (filteredToken) {
+                        reply += filteredToken;
 
-                      // Yield each token as it arrives
-                      yield {
-                        type: 'synthesis_chunk',
-                        data: {
-                          token,
-                          accumulated: reply
-                        }
-                      };
+                        // Yield each token as it arrives
+                        yield {
+                          type: 'synthesis_chunk',
+                          data: {
+                            token: filteredToken,
+                            accumulated: reply
+                          }
+                        };
+                      }
                     }
                   } catch (parseError) {
                     // Skip malformed JSON
@@ -787,16 +848,19 @@ export class AIOrchestrationService {
             }
 
             if (token) {
-              reply += token;
+              const filteredToken = filter.process(token);
+              if (filteredToken) {
+                reply += filteredToken;
 
-              // Yield each token as it arrives
-              yield {
-                type: 'synthesis_chunk',
-                data: {
-                  token,
-                  accumulated: reply
-                }
-              };
+                // Yield each token as it arrives
+                yield {
+                  type: 'synthesis_chunk',
+                  data: {
+                    token: filteredToken,
+                    accumulated: reply
+                  }
+                };
+              }
             }
           }
         } else {
@@ -900,6 +964,7 @@ export class AIOrchestrationService {
           });
 
           let reply = '';
+          const filter = new StreamThinkingFilter();
 
           // Handle ReadableStream format (Cloudflare Workers AI)
           if (stream instanceof ReadableStream || (stream && typeof stream.getReader === 'function')) {
@@ -930,15 +995,18 @@ export class AIOrchestrationService {
                       // Extract content from OpenAI-style streaming format
                       if (parsed.choices && parsed.choices[0]?.delta?.content) {
                         const token = parsed.choices[0].delta.content;
-                        reply += token;
+                        const filteredToken = filter.process(token);
+                        if (filteredToken) {
+                          reply += filteredToken;
 
-                        yield {
-                          type: 'synthesis_chunk',
-                          data: {
-                            token,
-                            accumulated: reply
-                          }
-                        };
+                          yield {
+                            type: 'synthesis_chunk',
+                            data: {
+                              token: filteredToken,
+                              accumulated: reply
+                            }
+                          };
+                        }
                       }
                     } catch (parseError) {
                       // Skip malformed JSON
@@ -964,15 +1032,18 @@ export class AIOrchestrationService {
               }
 
               if (token) {
-                reply += token;
+                const filteredToken = filter.process(token);
+                if (filteredToken) {
+                  reply += filteredToken;
 
-                yield {
-                  type: 'synthesis_chunk',
-                  data: {
-                    token,
-                    accumulated: reply
-                  }
-                };
+                  yield {
+                    type: 'synthesis_chunk',
+                    data: {
+                      token: filteredToken,
+                      accumulated: reply
+                    }
+                  };
+                }
               }
             }
           }
@@ -1178,7 +1249,7 @@ export class AIOrchestrationService {
 
     return {
       role: 'CFO',
-      advice: result.data?.choices[0]?.message?.content || 'CFO advice unavailable',
+      advice: new StreamThinkingFilter().process(result.data?.choices[0]?.message?.content || 'CFO advice unavailable'),
       duration: result.totalDuration,
       attempts: result.attempts,
       success: result.success
@@ -1205,7 +1276,7 @@ export class AIOrchestrationService {
 
     return {
       role: 'CMO',
-      advice: result.data?.choices[0]?.message?.content || 'CMO advice unavailable',
+      advice: new StreamThinkingFilter().process(result.data?.choices[0]?.message?.content || 'CMO advice unavailable'),
       duration: result.totalDuration,
       attempts: result.attempts,
       success: result.success
@@ -1232,7 +1303,7 @@ export class AIOrchestrationService {
 
     return {
       role: 'COO',
-      advice: result.data?.choices[0]?.message?.content || 'COO advice unavailable',
+      advice: new StreamThinkingFilter().process(result.data?.choices[0]?.message?.content || 'COO advice unavailable'),
       duration: result.totalDuration,
       attempts: result.attempts,
       success: result.success
